@@ -32,10 +32,10 @@ export default function App() {
 
   useEffect(() => { if (sessao) carregarServidores(); }, [sessao]);
 
-  // Reconecta na sala salva ao recarregar a pagina (F5)
+  // Reconecta na sala da URL ao recarregar a pagina (F5)
   useEffect(() => {
     if (servidores.length && !salaAtual) {
-      const salvo = localStorage.getItem("convorax_sala");
+      const salvo = new URLSearchParams(window.location.search).get("sala");
       if (salvo) {
         const serv = servidores.find((x) => x.id === salvo);
         if (serv) entrarNaSala(serv);
@@ -65,12 +65,12 @@ export default function App() {
     const data = await res.json();
     setToken(data.token);
     setSalaAtual(servidor);
-    localStorage.setItem("convorax_sala", servidor.id);
+    window.history.replaceState(null, "", "?sala=" + servidor.id);
   }
   function sairDaSala() {
     setSalaAtual(null);
     setToken("");
-    localStorage.removeItem("convorax_sala");
+    window.history.replaceState(null, "", window.location.pathname);
   }
 
   if (!sessao) return <Login />;
