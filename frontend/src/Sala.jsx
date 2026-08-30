@@ -12,10 +12,23 @@ import { supabase } from "./supabase";
 
 function Avatar({ participant }) {
   const [falando, setFalando] = useState(participant.isSpeaking);
+  const [mutado, setMutado] = useState(!participant.isMicrophoneEnabled);
   useEffect(() => {
-    const update = () => setFalando(participant.isSpeaking);
-    participant.on("isSpeakingChanged", update);
-    return () => participant.off("isSpeakingChanged", update);
+    const updateFala = () => setFalando(participant.isSpeaking);
+    const updateMic = () => setMutado(!participant.isMicrophoneEnabled);
+    participant.on("isSpeakingChanged", updateFala);
+    participant.on("trackMuted", updateMic);
+    participant.on("trackUnmuted", updateMic);
+    participant.on("trackPublished", updateMic);
+    participant.on("trackUnpublished", updateMic);
+    updateMic();
+    return () => {
+      participant.off("isSpeakingChanged", updateFala);
+      participant.off("trackMuted", updateMic);
+      participant.off("trackUnmuted", updateMic);
+      participant.off("trackPublished", updateMic);
+      participant.off("trackUnpublished", updateMic);
+    };
   }, [participant]);
   const nome = participant.identity || "?";
   const inicial = nome.charAt(0).toUpperCase();
@@ -29,11 +42,19 @@ function Avatar({ participant }) {
       style={{
         display: "flex", flexDirection: "column", alignItems: "center",
         justifyContent: "center", background: "#2b2d31", borderRadius: 12,
-        padding: 24, minHeight: 160,
-        boxShadow: falando ? "0 0 0 3px #23a559" : "0 0 0 1px #1e1f22",
+        padding: 24, minHeight: 160, position: "relative",
+        boxShadow: falando && !mutado ? "0 0 0 3px #23a559" : "0 0 0 1px #1e1f22",
         transition: "box-shadow 0.1s ease",
       }}
     >
+      {mutado && (
+        <div style={{
+          position: "absolute", top: 12, right: 12,
+          width: 28, height: 28, borderRadius: "50%", background: "#f23f43",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 15, color: "#fff",
+        }} title="Microfone silenciado">🔇</div>
+      )}
       <div style={{
         width: 80, height: 80, borderRadius: "50%", background: "#5865f2",
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -141,8 +162,8 @@ function Chat({ salaId, meuNome }) {
           onClick={() => fileRef.current?.click()}
           disabled={enviando}
           style={{ background: "#404249", border: "none", color: "#dbdee1", borderRadius: 8, width: 38, height: 38, cursor: "pointer", fontSize: 18, flexShrink: 0 }}
-          title="Enviar imagem ou vídeo"
-        >{enviando ? "…" : "+"}</button>
+          title="Enviar imagem ou video"
+        >{enviando ? "..." : "+"}</button>
         <input ref={fileRef} type="file" accept="image/*,video/*" onChange={enviarArquivo} style={{ display: "none" }} />
         <input
           value={texto}
