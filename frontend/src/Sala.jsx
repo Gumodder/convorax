@@ -65,7 +65,7 @@ export default function Sala({ nomeServidor }) {
               {screenShares.map((track) => (
                 <video key={track.publication.trackSid}
                   ref={(el) => { if (el) track.publication.track?.attach(el); }}
-                  autoPlay style={{ width: "100%", borderRadius: 12, background: "#000" }} />
+                  autoPlay style={{ width: "100%", maxWidth: 900, display: "block", margin: "0 auto", borderRadius: 12, background: "#000" }} />
               ))}
             </div>
           )}
