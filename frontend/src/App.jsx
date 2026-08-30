@@ -45,7 +45,7 @@ export default function App() {
   async function entrarPorCodigo() {
     if (!codigo) return;
     const { error } = await supabase.rpc("entrar_por_codigo", { codigo_convite: codigo });
-    if (error) setAviso("Código inválido");
+    if (error) setAviso("Codigo invalido");
     else { setCodigo(""); setAviso(""); carregarServidores(); }
   }
   async function entrarNaSala(servidor) {
@@ -60,8 +60,16 @@ export default function App() {
 
   if (salaAtual) {
     return (
-      <LiveKitRoom token={token} serverUrl={LIVEKIT_URL} connect={true} video={false} audio={true} audioCaptureDefaults={{ noiseSuppression: true, echoCancellation: true, autoGainContr
-        onDisconnected={() => setSalaAtual(null)} style={{ height: "100vh" }}>
+      <LiveKitRoom
+        token={token}
+        serverUrl={LIVEKIT_URL}
+        connect={true}
+        video={false}
+        audio={true}
+        audioCaptureDefaults={{ noiseSuppression: true, echoCancellation: true, autoGainControl: true }}
+        onDisconnected={() => setSalaAtual(null)}
+        style={{ height: "100vh" }}
+      >
         <Sala salaId={salaAtual.id} nomeServidor={salaAtual.nome} onSair={() => setSalaAtual(null)} />
       </LiveKitRoom>
     );
@@ -95,7 +103,7 @@ export default function App() {
           </div>
         </div>
         <div style={s.cardAcao}>
-          <span style={s.acaoLabel}>ENTRAR POR CÓDIGO</span>
+          <span style={s.acaoLabel}>ENTRAR POR CODIGO</span>
           <div style={{ ...s.linha, flexDirection: mobile ? "column" : "row" }}>
             <input placeholder="Ex: A3F9K2" value={codigo}
               onChange={(e) => setCodigo(e.target.value)}
@@ -111,7 +119,7 @@ export default function App() {
         {servidores.length === 0 && (
           <div style={s.vazio}>
             <p style={{ fontSize: 18, fontWeight: 600 }}>Nenhum servidor ainda</p>
-            <p style={{ color: "#b5bac1", marginTop: 4 }}>Crie um ou entre com um código.</p>
+            <p style={{ color: "#b5bac1", marginTop: 4 }}>Crie um ou entre com um codigo.</p>
           </div>
         )}
         <AnimatePresence>
