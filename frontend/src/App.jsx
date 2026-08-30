@@ -32,6 +32,17 @@ export default function App() {
 
   useEffect(() => { if (sessao) carregarServidores(); }, [sessao]);
 
+  // Reconecta na sala salva ao recarregar a pagina (F5)
+  useEffect(() => {
+    if (servidores.length && !salaAtual) {
+      const salvo = localStorage.getItem("convorax_sala");
+      if (salvo) {
+        const serv = servidores.find((x) => x.id === salvo);
+        if (serv) entrarNaSala(serv);
+      }
+    }
+  }, [servidores]);
+
   async function carregarServidores() {
     const { data } = await supabase.from("servidores").select("*");
     setServidores(data || []);
@@ -54,6 +65,12 @@ export default function App() {
     const data = await res.json();
     setToken(data.token);
     setSalaAtual(servidor);
+    localStorage.setItem("convorax_sala", servidor.id);
+  }
+  function sairDaSala() {
+    setSalaAtual(null);
+    setToken("");
+    localStorage.removeItem("convorax_sala");
   }
 
   if (!sessao) return <Login />;
@@ -67,10 +84,10 @@ export default function App() {
         video={false}
         audio={true}
         audioCaptureDefaults={{ noiseSuppression: true, echoCancellation: true, autoGainControl: true }}
-        onDisconnected={() => setSalaAtual(null)}
+        onDisconnected={sairDaSala}
         style={{ height: "100vh" }}
       >
-        <Sala salaId={salaAtual.id} nomeServidor={salaAtual.nome} onSair={() => setSalaAtual(null)} />
+        <Sala salaId={salaAtual.id} nomeServidor={salaAtual.nome} onSair={sairDaSala} />
       </LiveKitRoom>
     );
   }
