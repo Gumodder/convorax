@@ -60,9 +60,9 @@ export default function App() {
 
   if (salaAtual) {
     return (
-      <LiveKitRoom token={token} serverUrl={LIVEKIT_URL} connect={true} video={false} audio={true}
+      <LiveKitRoom token={token} serverUrl={LIVEKIT_URL} connect={true} video={false} audio={true} audioCaptureDefaults={{ noiseSuppression: true, echoCancellation: true, autoGainContr
         onDisconnected={() => setSalaAtual(null)} style={{ height: "100vh" }}>
-        <Sala nomeServidor={salaAtual.nome} onSair={() => setSalaAtual(null)} />
+        <Sala salaId={salaAtual.id} nomeServidor={salaAtual.nome} onSair={() => setSalaAtual(null)} />
       </LiveKitRoom>
     );
   }
