@@ -2,6 +2,7 @@
 import { supabase } from "./supabase";
 import Login from "./Login";
 import Sala from "./Sala";
+import MenuPerfil from "./MenuPerfil";
 import { LiveKitRoom } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { motion, AnimatePresence } from "framer-motion";
@@ -144,7 +145,7 @@ export default function App() {
             <h1 style={s.h1}>Servidores</h1>
             <p style={s.email}>{sessao.user.email}</p>
           </div>
-          <motion.button whileTap={{ scale: 0.95 }} whileHover={{ scale: 1.03 }} onClick={() => supabase.auth.signOut()} style={s.sair}>Sair</motion.button>
+          <MenuPerfil sessao={sessao} />
         </header>
 
         <div style={{ ...s.acoes, flexDirection: mobile ? "column" : "row" }}>
