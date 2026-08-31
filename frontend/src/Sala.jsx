@@ -188,12 +188,13 @@ function ParticipanteMini({ participant, avatarUrl }) {
 }
 
 // ---- Chat ----
-function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais = [], canalAtual, onTrocarCanal, onCriarCanal, criandoCanal }) {
+function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais = [], canalAtual, onTrocarCanal, onCriarCanal, criandoCanal, souDono }) {
   const nomeCanal = canais.find((c) => c.id === canalId)?.nome || "chat";
   const [mensagens, setMensagens] = useState([]);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [digitando, setDigitando] = useState([]); // nomes de quem esta digitando
+  const [hoverMsg, setHoverMsg] = useState(null); // id da msg com mouse em cima
   const fimRef = useRef(null);
   const fileRef = useRef(null);
   const digCanalRef = useRef(null);
@@ -216,6 +217,10 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "mensagens", filter: "canal_id=eq." + canalId },
         (payload) => setMensagens((m) => [...m, payload.new])
+      )
+      .on("postgres_changes",
+        { event: "DELETE", schema: "public", table: "mensagens" },
+        (payload) => setMensagens((m) => m.filter((x) => x.id !== payload.old.id))
       )
       .subscribe();
 
@@ -264,6 +269,14 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
     if (!c) return;
     clearTimeout(meuTimer.current);
     c.send({ type: "broadcast", event: "parou", payload: { nome: meuNome } });
+  }
+
+  async function apagarMensagem(id) {
+    if (!window.confirm("Apagar esta mensagem?")) return;
+    // some na hora localmente
+    setMensagens((m) => m.filter((x) => x.id !== id));
+    const { error } = await supabase.from("mensagens").delete().eq("id", id);
+    if (error) alert("Não foi possível apagar: " + error.message);
   }
 
   async function enviarTexto() {
@@ -344,17 +357,26 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
           const anterior = mensagens[i - 1];
           const mostrarNome = !anterior || anterior.autor !== m.autor;
           const cor = corDoNome(m.autor || "?");
+          const podeApagar = meu || souDono;
           return (
-            <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: meu ? "flex-end" : "flex-start", marginTop: mostrarNome ? 6 : 0 }}>
+            <div key={m.id}
+              onMouseEnter={() => setHoverMsg(m.id)}
+              onMouseLeave={() => setHoverMsg((h) => (h === m.id ? null : h))}
+              style={{ display: "flex", flexDirection: "column", alignItems: meu ? "flex-end" : "flex-start", marginTop: mostrarNome ? 6 : 0 }}>
               {mostrarNome && !meu && (
                 <span style={{ color: cor, fontSize: 12, fontWeight: 700, marginBottom: 2, marginLeft: 4 }}>{m.autor}</span>
               )}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexDirection: meu ? "row" : "row-reverse", maxWidth: "85%" }}>
+                {podeApagar && (mobile || hoverMsg === m.id) && (
+                  <button onClick={() => apagarMensagem(m.id)}
+                    style={{ flexShrink: 0, background: "rgba(242,63,67,0.15)", border: "none", color: "#f23f43", borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}
+                    title="Apagar mensagem">🗑</button>
+                )}
               <motion.div
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.15 }}
                 style={{
-                  maxWidth: "80%",
                   background: meu ? "linear-gradient(135deg, #7c3aed, #3b82f6)" : "#383a40",
                   color: "#fff", borderRadius: 14,
                   borderBottomRightRadius: meu ? 4 : 14,
@@ -375,6 +397,7 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
                   <a href={m.arquivo_url} target="_blank" rel="noreferrer" style={{ color: "#fff", fontSize: 14, textDecoration: "underline" }}>Baixar arquivo</a>
                 )}
               </motion.div>
+              </div>
             </div>
           );
         })}
@@ -438,6 +461,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
   const [canais, setCanais] = useState([]);      // canais de texto do servidor
   const [canalAtual, setCanalAtual] = useState(null); // id do canal selecionado
   const [criandoCanal, setCriandoCanal] = useState(false);
+  const [souDono, setSouDono] = useState(false); // sou dono deste servidor?
   const videoRef = useRef(null);
   const { localParticipant } = useLocalParticipant();
   const micTracks = useTracks([Track.Source.Microphone]);
@@ -493,6 +517,21 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
       )
       .subscribe();
     return () => { ativo = false; supabase.removeChannel(ch); };
+  }, [salaId]);
+
+  // Descobre se sou o dono deste servidor
+  useEffect(() => {
+    if (!salaId) return;
+    let ativo = true;
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      const meuId = u?.user?.id;
+      if (!meuId) return;
+      const { data } = await supabase
+        .from("servidores").select("dono_id").eq("id", salaId).single();
+      if (ativo && data) setSouDono(data.dono_id === meuId);
+    })();
+    return () => { ativo = false; };
   }, [salaId]);
 
   async function criarCanal() {
@@ -633,7 +672,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
                 transition={{ type: "tween", duration: 0.22, ease: "easeInOut" }}
                 style={{ position: "fixed", inset: 0, zIndex: 50, background: "#2b2d31" }}>
                 <Chat canalId={canalAtual} meuNome={meuNome} mobile={true} onFechar={() => setChatAberto(false)} onImagem={setImagemAberta}
-                  canais={canais} canalAtual={canalAtual} onTrocarCanal={setCanalAtual} onCriarCanal={criarCanal} criandoCanal={criandoCanal} />
+                  canais={canais} canalAtual={canalAtual} onTrocarCanal={setCanalAtual} onCriarCanal={criarCanal} criandoCanal={criandoCanal} souDono={souDono} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -716,7 +755,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
               transition={{ duration: 0.25, ease: "easeInOut" }}
               style={{ flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
               <div style={{ width: 340, height: "100%" }}>
-                <Chat canalId={canalAtual} meuNome={meuNome} mobile={false} onImagem={setImagemAberta} onRecolher={() => setChatRecolhido(true)} canais={canais} />
+                <Chat canalId={canalAtual} meuNome={meuNome} mobile={false} onImagem={setImagemAberta} onRecolher={() => setChatRecolhido(true)} canais={canais} souDono={souDono} />
               </div>
             </motion.div>
           )}
