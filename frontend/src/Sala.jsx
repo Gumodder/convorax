@@ -10,7 +10,6 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
 
-// Cor fixa por usuario (mesmo nome -> mesma cor sempre)
 const CORES = ["#a855f7", "#3b82f6", "#06b6d4", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#14b8a6", "#f97316"];
 function corDoNome(nome) {
   let h = 0;
@@ -51,10 +50,12 @@ function Avatar({ participant, avatarUrl }) {
       transition={{ type: "spring", stiffness: 300, damping: 25 }}
       style={{
         display: "flex", flexDirection: "column", alignItems: "center",
-        justifyContent: "center", background: "#2b2d31", borderRadius: 12,
+        justifyContent: "center",
+        background: ativo ? "rgba(35,165,89,0.08)" : "rgba(30,31,34,0.7)",
+        backdropFilter: "blur(8px)", borderRadius: 14,
         padding: 24, minHeight: 160, position: "relative",
-        boxShadow: ativo ? "0 0 0 1px #23a559" : "0 0 0 1px #1e1f22",
-        transition: "box-shadow 0.15s ease",
+        border: ativo ? "1px solid rgba(35,165,89,0.6)" : "1px solid rgba(255,255,255,0.06)",
+        transition: "all 0.2s ease",
       }}
     >
       {mutado && (
@@ -66,7 +67,6 @@ function Avatar({ participant, avatarUrl }) {
         }} title="Microfone silenciado">🔇</div>
       )}
       <div style={{ position: "relative", width: 84, height: 84, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {/* Anel pulsante quando fala */}
         <AnimatePresence>
           {ativo && (
             <motion.div
@@ -96,7 +96,7 @@ function Avatar({ participant, avatarUrl }) {
         <div style={{
           position: "absolute", bottom: 2, right: 2, zIndex: 2,
           width: 18, height: 18, borderRadius: "50%",
-          background: "#23a559", border: "3px solid #2b2d31",
+          background: "#23a559", border: "3px solid #1e1f22",
         }} title="Online" />
       </div>
       <span style={{ marginTop: 12, color: "#f2f3f5", fontWeight: 600, fontSize: 15 }}>{nome}</span>
@@ -104,7 +104,7 @@ function Avatar({ participant, avatarUrl }) {
   );
 }
 
-function Chat({ salaId, meuNome, onFechar, mobile }) {
+function Chat({ salaId, meuNome, onFechar, mobile, onImagem }) {
   const [mensagens, setMensagens] = useState([]);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -173,7 +173,7 @@ function Chat({ salaId, meuNome, onFechar, mobile }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#2b2d31" }}>
-      <div style={{ padding: "12px 16px", borderBottom: "1px solid #1e1f22", color: "#f2f3f5", fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ padding: "14px 16px", borderBottom: "1px solid #1e1f22", color: "#f2f3f5", fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 10, background: "linear-gradient(135deg, rgba(124,58,237,0.15), rgba(59,130,246,0.15))" }}>
         {mobile && (
           <motion.button
             whileTap={{ scale: 0.85 }}
@@ -182,7 +182,7 @@ function Chat({ salaId, meuNome, onFechar, mobile }) {
             title="Voltar"
           >←</motion.button>
         )}
-        Chat
+        💬 Chat
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
         {mensagens.map((m, i) => {
@@ -211,7 +211,8 @@ function Chat({ salaId, meuNome, onFechar, mobile }) {
               >
                 {m.conteudo && <span style={{ fontSize: 14 }}>{m.conteudo}</span>}
                 {m.arquivo_tipo === "image" && (
-                  <img src={m.arquivo_url} alt="" style={{ maxWidth: "100%", maxHeight: 240, borderRadius: 10, objectFit: "cover", display: "block" }} />
+                  <img src={m.arquivo_url} alt="" onClick={() => onImagem(m.arquivo_url)}
+                    style={{ maxWidth: "100%", maxHeight: 240, borderRadius: 10, objectFit: "cover", display: "block", cursor: "pointer" }} />
                 )}
                 {m.arquivo_tipo === "video" && (
                   <video src={m.arquivo_url} controls style={{ maxWidth: "100%", maxHeight: 240, borderRadius: 10, display: "block" }} />
@@ -227,10 +228,10 @@ function Chat({ salaId, meuNome, onFechar, mobile }) {
       </div>
       <div style={{ padding: 12, borderTop: "1px solid #1e1f22", display: "flex", gap: 8, alignItems: "center" }}>
         <motion.button
-          whileTap={{ scale: 0.85 }}
+          whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.05 }}
           onClick={() => fileRef.current?.click()}
           disabled={enviando}
-          style={{ background: "#404249", border: "none", color: "#dbdee1", borderRadius: 8, width: 38, height: 38, cursor: "pointer", fontSize: 18, flexShrink: 0 }}
+          style={{ background: "#404249", border: "none", color: "#dbdee1", borderRadius: 8, width: 40, height: 40, cursor: "pointer", fontSize: 18, flexShrink: 0 }}
           title="Enviar imagem ou video"
         >{enviando ? "..." : "+"}</motion.button>
         <input ref={fileRef} type="file" accept="image/*,video/*" onChange={enviarArquivo} style={{ display: "none" }} />
@@ -239,12 +240,12 @@ function Chat({ salaId, meuNome, onFechar, mobile }) {
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") enviarTexto(); }}
           placeholder="Mensagem..."
-          style={{ flex: 1, background: "#383a40", border: "none", color: "#dbdee1", borderRadius: 8, padding: "10px 12px", fontSize: 14, outline: "none" }}
+          style={{ flex: 1, background: "#383a40", border: "none", color: "#dbdee1", borderRadius: 8, padding: "11px 12px", fontSize: 14, outline: "none" }}
         />
         <motion.button
-          whileTap={{ scale: 0.85 }}
+          whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.05 }}
           onClick={enviarTexto}
-          style={{ background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", color: "#fff", borderRadius: 8, width: 38, height: 38, cursor: "pointer", fontSize: 16, flexShrink: 0 }}
+          style={{ background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", color: "#fff", borderRadius: 8, width: 40, height: 40, cursor: "pointer", fontSize: 16, flexShrink: 0, boxShadow: "0 3px 10px rgba(124,58,237,0.4)" }}
           title="Enviar"
         >➤</motion.button>
       </div>
@@ -257,7 +258,9 @@ export default function Sala({ salaId, nomeServidor }) {
   const screenShares = useTracks([Track.Source.ScreenShare]);
   const [chatAberto, setChatAberto] = useState(false);
   const [mobile, setMobile] = useState(window.innerWidth < 900);
-  const [perfis, setPerfis] = useState({}); // username -> avatar_url
+  const [perfis, setPerfis] = useState({});
+  const [imagemAberta, setImagemAberta] = useState(null);
+  const videoRef = useRef(null);
 
   useEffect(() => {
     const onResize = () => setMobile(window.innerWidth < 900);
@@ -265,12 +268,17 @@ export default function Sala({ salaId, nomeServidor }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Carrega mapa de perfis (username -> avatar) pra casar com o identity do participante
+  // Mapa: email_nome -> avatar_url (casa com o identity da call)
   useEffect(() => {
-    supabase.from("perfis").select("username, avatar_url").then(({ data }) => {
+    supabase.from("perfis").select("email_nome, username, avatar_url").then(({ data }) => {
       if (!data) return;
       const mapa = {};
-      data.forEach((p) => { if (p.username) mapa[p.username] = p.avatar_url; });
+      data.forEach((p) => {
+        if (p.avatar_url) {
+          if (p.email_nome) mapa[p.email_nome] = p.avatar_url;
+          if (p.username) mapa[p.username] = p.avatar_url;
+        }
+      });
       setPerfis(mapa);
     });
   }, []);
@@ -278,30 +286,47 @@ export default function Sala({ salaId, nomeServidor }) {
   const eu = participants.find((p) => p.isLocal);
   const meuNome = eu?.identity || "convidado";
 
+  function telaCheia() {
+    const el = videoRef.current;
+    if (!el) return;
+    if (el.requestFullscreen) el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  }
+
   return (
     <LayoutContextProvider>
-      <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#313338" }}>
-        <div style={{ padding: "16px 24px", borderBottom: "1px solid #1e1f22", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontWeight: 700, color: "#f2f3f5", fontSize: 16 }}>{nomeServidor}</span>
+      <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0d0e11", position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: "-10%", left: "-8%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.12), transparent 70%)", filter: "blur(50px)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", bottom: "-10%", right: "-8%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(59,130,246,0.10), transparent 70%)", filter: "blur(50px)", pointerEvents: "none" }} />
+
+        <div style={{ position: "relative", zIndex: 1, padding: "16px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontWeight: 800, color: "#f2f3f5", fontSize: 16 }}>{nomeServidor}</span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#b5bac1", fontSize: 14, marginLeft: 8 }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#23a559", display: "inline-block" }} />
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#23a559", display: "inline-block", boxShadow: "0 0 8px #23a559" }} />
             {participants.length} online
           </span>
           <motion.button
-            whileTap={{ scale: 0.9 }}
+            whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.04 }}
+            transition={{ type: "spring", stiffness: 400, damping: 15 }}
             onClick={() => setChatAberto((v) => !v)}
-            style={{ marginLeft: "auto", background: "#404249", border: "none", color: "#dbdee1", borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 14, fontWeight: 600 }}
-          >{chatAberto ? "Fechar chat" : "Chat"}</motion.button>
+            style={{ marginLeft: "auto", background: chatAberto ? "#404249" : "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", color: "#fff", borderRadius: 10, padding: "9px 18px", cursor: "pointer", fontSize: 14, fontWeight: 700, boxShadow: chatAberto ? "none" : "0 3px 12px rgba(124,58,237,0.4)" }}
+          >{chatAberto ? "Fechar chat" : "💬 Chat"}</motion.button>
         </div>
 
-        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        <div style={{ position: "relative", zIndex: 1, flex: 1, display: "flex", overflow: "hidden" }}>
           <div style={{ flex: 1, overflow: "auto", padding: 24 }}>
             {screenShares.length > 0 && (
-              <div style={{ marginBottom: 24 }}>
+              <div style={{ marginBottom: 24, position: "relative" }}>
                 {screenShares.map((track) => (
-                  <video key={track.publication.trackSid}
-                    ref={(el) => { if (el) track.publication.track?.attach(el); }}
-                    autoPlay style={{ maxWidth: "100%", maxHeight: "65vh", objectFit: "contain", display: "block", margin: "0 auto", borderRadius: 12, background: "#000" }} />
+                  <div key={track.publication.trackSid} style={{ position: "relative" }}>
+                    <video
+                      ref={(el) => { if (el) { track.publication.track?.attach(el); videoRef.current = el; } }}
+                      autoPlay style={{ maxWidth: "100%", maxHeight: "65vh", objectFit: "contain", display: "block", margin: "0 auto", borderRadius: 12, background: "#000" }} />
+                    <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.05 }}
+                      onClick={telaCheia}
+                      style={{ position: "absolute", bottom: 12, right: 12, background: "rgba(0,0,0,0.6)", border: "none", color: "#fff", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 16 }}
+                      title="Tela cheia">⛶</motion.button>
+                  </div>
                 ))}
               </div>
             )}
@@ -318,15 +343,33 @@ export default function Sala({ salaId, nomeServidor }) {
                 ? { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, width: "100%", zIndex: 50, background: "#2b2d31" }
                 : { width: 340, flexShrink: 0, borderLeft: "1px solid #1e1f22" }
             }>
-              <Chat salaId={salaId} meuNome={meuNome} mobile={mobile} onFechar={() => setChatAberto(false)} />
+              <Chat salaId={salaId} meuNome={meuNome} mobile={mobile} onFechar={() => setChatAberto(false)} onImagem={setImagemAberta} />
             </div>
           )}
         </div>
 
         <RoomAudioRenderer />
-        <div style={{ borderTop: "1px solid #1e1f22", background: "#1e1f22" }}>
+        <div style={{ position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(20,21,24,0.9)", backdropFilter: "blur(8px)" }}>
           <ControlBar variation="minimal" controls={{ microphone: true, screenShare: true, camera: false, chat: false, leave: true }} />
         </div>
+
+        {/* Lightbox de imagem */}
+        <AnimatePresence>
+          {imagemAberta && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setImagemAberta(null)}
+              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, cursor: "zoom-out" }}
+            >
+              <motion.img
+                initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+                src={imagemAberta} alt=""
+                style={{ maxWidth: "95%", maxHeight: "95%", borderRadius: 8, objectFit: "contain" }} />
+              <button onClick={() => setImagemAberta(null)}
+                style={{ position: "fixed", top: 20, right: 20, background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", fontSize: 22, width: 44, height: 44, borderRadius: "50%", cursor: "pointer" }}>✕</button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </LayoutContextProvider>
   );
