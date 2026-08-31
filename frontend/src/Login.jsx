@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -6,7 +6,9 @@ export default function Login() {
   const [modo, setModo] = useState("entrar");
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
+  const [mostrarSenha, setMostrarSenha] = useState(false);
   const [mobile, setMobile] = useState(window.innerWidth < 640);
+  const senhaRef = useRef(null);
   useEffect(() => {
     const onResize = () => setMobile(window.innerWidth < 640);
     window.addEventListener("resize", onResize);
@@ -15,15 +17,20 @@ export default function Login() {
   async function handle() {
     setErro("");
     setCarregando(true);
-    if (modo === "entrar") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
-      if (error) setErro("Email ou senha incorretos");
-    } else {
-      const { error } = await supabase.auth.signUp({ email, password: senha });
-      if (error) setErro(error.message);
-      else setErro("Conta criada! Agora entre.");
+    try {
+      if (modo === "entrar") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
+        if (error) setErro("Email ou senha incorretos");
+      } else {
+        const { error } = await supabase.auth.signUp({ email, password: senha });
+        if (error) setErro(error.message);
+        else setErro("Conta criada! Agora entre.");
+      }
+    } catch (e) {
+      setErro("Falha ao conectar: " + (e?.message || "tente de novo"));
+    } finally {
+      setCarregando(false);
     }
-    setCarregando(false);
   }
   return (
     <div style={estilos.tela}>
@@ -36,10 +43,18 @@ export default function Login() {
         <p style={estilos.sub}>{modo === "entrar" ? "Que bom te ver de novo." : "É rapidinho."}</p>
         <label style={estilos.label}>EMAIL</label>
         <input value={email} onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handle()} style={estilos.input} />
+          onKeyDown={(e) => { if (e.key === "Enter") senhaRef.current?.focus(); }} style={estilos.input} />
         <label style={estilos.label}>SENHA</label>
-        <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handle()} style={estilos.input} />
+        <div style={{ position: "relative" }}>
+          <input ref={senhaRef} type={mostrarSenha ? "text" : "password"} value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handle()}
+            style={{ ...estilos.input, paddingRight: 44 }} />
+          <button type="button" onClick={() => setMostrarSenha((v) => !v)}
+            style={estilos.olho} title={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}>
+            {mostrarSenha ? "🙈" : "👁️"}
+          </button>
+        </div>
         <button onClick={handle} disabled={carregando} style={{ ...estilos.botao, opacity: carregando ? 0.7 : 1 }}>
           {carregando ? "..." : modo === "entrar" ? "Entrar" : "Continuar"}
         </button>
@@ -63,6 +78,7 @@ const estilos = {
   sub: { fontSize: 15, color: "#b5bac1", textAlign: "center", marginTop: 6, marginBottom: 24 },
   label: { display: "block", fontSize: 12, fontWeight: 700, color: "#b5bac1", marginTop: 16, marginBottom: 8, letterSpacing: 0.5 },
   input: { width: "100%", padding: 12, borderRadius: 8, border: "1px solid #2b2d31", background: "#1e1f22", color: "#f2f3f5", fontSize: 15, outline: "none", boxSizing: "border-box" },
+  olho: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", fontSize: 18, padding: 4, lineHeight: 1 },
   botao: { width: "100%", padding: 13, marginTop: 24, borderRadius: 8, border: "none", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 16px rgba(124,58,237,0.4)" },
   erro: { color: "#f0b232", fontSize: 13, marginTop: 12, textAlign: "center" },
   troca: { fontSize: 14, color: "#b5bac1", marginTop: 20, textAlign: "center" },
