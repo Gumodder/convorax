@@ -42,6 +42,13 @@ function Avatar({ participant, avatarUrl }) {
   const inicial = nome.charAt(0).toUpperCase();
   const cor = corDoNome(nome);
   const ativo = falando && !mutado;
+  const remoto = !participant.isLocal;
+  const [volume, setVolumeState] = useState(100);
+  const [mostrarVol, setMostrarVol] = useState(false);
+  function mudarVolume(v) {
+    setVolumeState(v);
+    try { participant.setVolume?.(v / 100); } catch (e) {}
+  }
   return (
     <motion.div
       layout
@@ -101,6 +108,25 @@ function Avatar({ participant, avatarUrl }) {
         }} title="Online" />
       </div>
       <span style={{ marginTop: 12, color: "#f2f3f5", fontWeight: 600, fontSize: 15 }}>{nome}</span>
+      {remoto && (
+        <div style={{ marginTop: 10, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <motion.button whileTap={{ scale: 0.9 }}
+            onClick={() => setMostrarVol((v) => !v)}
+            style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#b5bac1", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}
+            title="Volume desta pessoa">
+            {volume === 0 ? "🔇" : "🔊"} {volume}%
+          </motion.button>
+          <AnimatePresence>
+            {mostrarVol && (
+              <motion.input
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                type="range" min="0" max="200" value={volume}
+                onChange={(e) => mudarVolume(Number(e.target.value))}
+                style={{ width: "90%", accentColor: "#7c3aed", cursor: "pointer" }} />
+            )}
+          </AnimatePresence>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -149,7 +175,7 @@ function ParticipanteMini({ participant, avatarUrl }) {
 }
 
 // ---- Chat ----
-function Chat({ salaId, meuNome, onFechar, mobile, onImagem }) {
+function Chat({ salaId, meuNome, onFechar, mobile, onImagem, onRecolher }) {
   const [mensagens, setMensagens] = useState([]);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -228,6 +254,11 @@ function Chat({ salaId, meuNome, onFechar, mobile, onImagem }) {
           >←</motion.button>
         )}
         💬 Chat
+        {!mobile && onRecolher && (
+          <motion.button whileTap={{ scale: 0.85 }} onClick={onRecolher}
+            style={{ marginLeft: "auto", background: "rgba(255,255,255,0.08)", border: "none", color: "#f2f3f5", fontSize: 16, width: 30, height: 30, borderRadius: 8, cursor: "pointer" }}
+            title="Recolher chat">→</motion.button>
+        )}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
         {mensagens.map((m, i) => {
@@ -305,6 +336,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
   const [mobile, setMobile] = useState(window.innerWidth < 900);
   const [perfis, setPerfis] = useState({});
   const [imagemAberta, setImagemAberta] = useState(null);
+  const [chatRecolhido, setChatRecolhido] = useState(false);
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -441,10 +473,18 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
           </div>
         </div>
 
-        {/* Coluna 3: chat sempre visivel */}
-        <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
-          <Chat salaId={salaId} meuNome={meuNome} mobile={false} onImagem={setImagemAberta} />
-        </div>
+        {/* Coluna 3: chat (recolhivel) */}
+        {!chatRecolhido && (
+          <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
+            <Chat salaId={salaId} meuNome={meuNome} mobile={false} onImagem={setImagemAberta} onRecolher={() => setChatRecolhido(true)} />
+          </div>
+        )}
+        {chatRecolhido && (
+          <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.05 }}
+            onClick={() => setChatRecolhido(false)}
+            style={{ position: "fixed", bottom: 20, right: 20, zIndex: 40, background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", color: "#fff", borderRadius: 14, padding: "12px 18px", cursor: "pointer", fontSize: 15, fontWeight: 700, boxShadow: "0 6px 20px rgba(124,58,237,0.5)" }}
+            title="Abrir chat">💬 Chat</motion.button>
+        )}
 
         <Lightbox imagem={imagemAberta} fechar={() => setImagemAberta(null)} />
       </div>
