@@ -1,8 +1,9 @@
 import {
   useParticipants,
   useTracks,
+  useLocalParticipant,
   ControlBar,
-  RoomAudioRenderer,
+  AudioTrack,
   LayoutContextProvider,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
@@ -18,24 +19,24 @@ function corDoNome(nome) {
 }
 
 // ---- Avatar grande (grid central) ----
-function Avatar({ participant, avatarUrl }) {
+function Avatar({ participant, avatarUrl, onVolume }) {
   const [falando, setFalando] = useState(participant.isSpeaking);
   const [mutado, setMutado] = useState(!participant.isMicrophoneEnabled);
   useEffect(() => {
     const updateFala = () => setFalando(participant.isSpeaking);
-    const updateMic = () => setMutado(!participant.isMicrophoneEnabled);
+    const updateTracks = () => { setMutado(!participant.isMicrophoneEnabled); setTransmitindo(participant.isScreenShareEnabled); };
     participant.on("isSpeakingChanged", updateFala);
-    participant.on("trackMuted", updateMic);
-    participant.on("trackUnmuted", updateMic);
-    participant.on("trackPublished", updateMic);
-    participant.on("trackUnpublished", updateMic);
-    updateMic();
+    participant.on("trackMuted", updateTracks);
+    participant.on("trackUnmuted", updateTracks);
+    participant.on("trackPublished", updateTracks);
+    participant.on("trackUnpublished", updateTracks);
+    updateTracks();
     return () => {
       participant.off("isSpeakingChanged", updateFala);
-      participant.off("trackMuted", updateMic);
-      participant.off("trackUnmuted", updateMic);
-      participant.off("trackPublished", updateMic);
-      participant.off("trackUnpublished", updateMic);
+      participant.off("trackMuted", updateTracks);
+      participant.off("trackUnmuted", updateTracks);
+      participant.off("trackPublished", updateTracks);
+      participant.off("trackUnpublished", updateTracks);
     };
   }, [participant]);
   const nome = participant.identity || "?";
@@ -47,7 +48,7 @@ function Avatar({ participant, avatarUrl }) {
   const [mostrarVol, setMostrarVol] = useState(false);
   function mudarVolume(v) {
     setVolumeState(v);
-    try { participant.setVolume?.(v / 100); } catch (e) {}
+    if (onVolume) onVolume(nome, v);
   }
   return (
     <motion.div
@@ -73,6 +74,15 @@ function Avatar({ participant, avatarUrl }) {
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 15, color: "#fff",
         }} title="Microfone silenciado">🔇</div>
+      )}
+      {transmitindo && (
+        <div style={{
+          position: "absolute", top: 12, left: 12, display: "flex", alignItems: "center", gap: 5,
+          background: "#f23f43", color: "#fff", fontSize: 10, fontWeight: 800,
+          padding: "3px 8px", borderRadius: 20, letterSpacing: 0.5,
+        }} title="Transmitindo agora">
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} /> AO VIVO
+        </div>
       )}
       <div style={{ position: "relative", width: 84, height: 84, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <AnimatePresence>
@@ -135,9 +145,10 @@ function Avatar({ participant, avatarUrl }) {
 function ParticipanteMini({ participant, avatarUrl }) {
   const [falando, setFalando] = useState(participant.isSpeaking);
   const [mutado, setMutado] = useState(!participant.isMicrophoneEnabled);
+  const [transmitindo, setTransmitindo] = useState(participant.isScreenShareEnabled);
   useEffect(() => {
     const uf = () => setFalando(participant.isSpeaking);
-    const um = () => setMutado(!participant.isMicrophoneEnabled);
+    const um = () => { setMutado(!participant.isMicrophoneEnabled); setTransmitindo(participant.isScreenShareEnabled); };
     participant.on("isSpeakingChanged", uf);
     participant.on("trackMuted", um);
     participant.on("trackUnmuted", um);
@@ -169,6 +180,7 @@ function ParticipanteMini({ participant, avatarUrl }) {
         </div>
       </div>
       <span style={{ color: ativo ? "#f2f3f5" : "#b5bac1", fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{nome}</span>
+      {transmitindo && <span style={{ fontSize: 9, fontWeight: 800, color: "#fff", background: "#f23f43", padding: "2px 6px", borderRadius: 10 }} title="Transmitindo">AO VIVO</span>}
       {mutado && <span style={{ fontSize: 13 }} title="Mutado">🔇</span>}
     </div>
   );
@@ -179,8 +191,12 @@ function Chat({ salaId, meuNome, onFechar, mobile, onImagem, onRecolher }) {
   const [mensagens, setMensagens] = useState([]);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [digitando, setDigitando] = useState([]); // nomes de quem esta digitando
   const fimRef = useRef(null);
   const fileRef = useRef(null);
+  const digCanalRef = useRef(null);
+  const digTimers = useRef({});   // nome -> timeout pra remover
+  const meuTimer = useRef(null);
 
   useEffect(() => {
     if (!salaId) return;
@@ -207,10 +223,51 @@ function Chat({ salaId, meuNome, onFechar, mobile, onImagem, onRecolher }) {
     fimRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [mensagens]);
 
+  // Canal de "esta digitando" (broadcast)
+  useEffect(() => {
+    if (!salaId) return;
+    const canal = supabase.channel("dig-" + salaId, { config: { broadcast: { self: false } } });
+    canal.on("broadcast", { event: "digitando" }, ({ payload }) => {
+      const quem = payload?.nome;
+      if (!quem || quem === meuNome) return;
+      setDigitando((lista) => lista.includes(quem) ? lista : [...lista, quem]);
+      clearTimeout(digTimers.current[quem]);
+      digTimers.current[quem] = setTimeout(() => {
+        setDigitando((lista) => lista.filter((n) => n !== quem));
+      }, 3000);
+    });
+    canal.on("broadcast", { event: "parou" }, ({ payload }) => {
+      const quem = payload?.nome;
+      if (!quem) return;
+      clearTimeout(digTimers.current[quem]);
+      setDigitando((lista) => lista.filter((n) => n !== quem));
+    });
+    canal.subscribe();
+    digCanalRef.current = canal;
+    return () => { supabase.removeChannel(canal); digCanalRef.current = null; };
+  }, [salaId, meuNome]);
+
+  function avisarDigitando() {
+    const c = digCanalRef.current;
+    if (!c) return;
+    c.send({ type: "broadcast", event: "digitando", payload: { nome: meuNome } });
+    clearTimeout(meuTimer.current);
+    meuTimer.current = setTimeout(() => {
+      c.send({ type: "broadcast", event: "parou", payload: { nome: meuNome } });
+    }, 2500);
+  }
+  function pareiDigitar() {
+    const c = digCanalRef.current;
+    if (!c) return;
+    clearTimeout(meuTimer.current);
+    c.send({ type: "broadcast", event: "parou", payload: { nome: meuNome } });
+  }
+
   async function enviarTexto() {
     const t = texto.trim();
     if (!t) return;
     setTexto("");
+    pareiDigitar();
     await supabase.from("mensagens").insert({
       sala_id: String(salaId), autor: meuNome, conteudo: t,
     });
@@ -249,15 +306,15 @@ function Chat({ salaId, meuNome, onFechar, mobile, onImagem, onRecolher }) {
           <motion.button
             whileTap={{ scale: 0.85 }}
             onClick={onFechar}
-            style={{ background: "transparent", border: "none", color: "#f2f3f5", fontSize: 24, cursor: "pointer", padding: 0, lineHeight: 1, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}
-            title="Voltar"
-          >←</motion.button>
+            style={{ background: "rgba(255,255,255,0.08)", border: "none", color: "#f2f3f5", fontSize: 18, cursor: "pointer", padding: 0, lineHeight: 1, width: 32, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}
+            title="Fechar"
+          >✕</motion.button>
         )}
         💬 Chat
         {!mobile && onRecolher && (
           <motion.button whileTap={{ scale: 0.85 }} onClick={onRecolher}
             style={{ marginLeft: "auto", background: "rgba(255,255,255,0.08)", border: "none", color: "#f2f3f5", fontSize: 16, width: 30, height: 30, borderRadius: 8, cursor: "pointer" }}
-            title="Recolher chat">→</motion.button>
+            title="Fechar chat">✕</motion.button>
         )}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -302,6 +359,23 @@ function Chat({ salaId, meuNome, onFechar, mobile, onImagem, onRecolher }) {
         })}
         <div ref={fimRef} />
       </div>
+      <AnimatePresence>
+        {digitando.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+            style={{ padding: "4px 16px", color: "#b5bac1", fontSize: 12, display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
+            <span style={{ display: "inline-flex", gap: 2 }}>
+              {[0, 1, 2].map((i) => (
+                <motion.span key={i}
+                  animate={{ opacity: [0.3, 1, 0.3], y: [0, -2, 0] }}
+                  transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+                  style={{ width: 4, height: 4, borderRadius: "50%", background: "#b5bac1", display: "inline-block" }} />
+              ))}
+            </span>
+            {digitando.length === 1 ? `${digitando[0]} está digitando` : `${digitando.length} pessoas estão digitando`}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div style={{ padding: 12, borderTop: "1px solid #1e1f22", display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
         <motion.button
           whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.05 }}
@@ -313,7 +387,7 @@ function Chat({ salaId, meuNome, onFechar, mobile, onImagem, onRecolher }) {
         <input ref={fileRef} type="file" accept="image/*,video/*" onChange={enviarArquivo} style={{ display: "none" }} />
         <input
           value={texto}
-          onChange={(e) => setTexto(e.target.value)}
+          onChange={(e) => { setTexto(e.target.value); if (e.target.value) avisarDigitando(); }}
           onKeyDown={(e) => { if (e.key === "Enter") enviarTexto(); }}
           placeholder="Mensagem..."
           style={{ flex: 1, minWidth: 0, background: "#383a40", border: "none", color: "#dbdee1", borderRadius: 8, padding: "11px 12px", fontSize: 14, outline: "none" }}
@@ -337,7 +411,15 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
   const [perfis, setPerfis] = useState({});
   const [imagemAberta, setImagemAberta] = useState(null);
   const [chatRecolhido, setChatRecolhido] = useState(false);
+  const [micVol, setMicVol] = useState({});      // identity -> 0..200
+  const [telaVol, setTelaVol] = useState({});    // identity -> 0..200
+  const [telaMute, setTelaMute] = useState({});  // identity -> bool
   const videoRef = useRef(null);
+  const { localParticipant } = useLocalParticipant();
+  const micTracks = useTracks([Track.Source.Microphone]);
+  const telaAudioTracks = useTracks([Track.Source.ScreenShareAudio]);
+
+  function ajustarMic(identity, v) { setMicVol((m) => ({ ...m, [identity]: v })); }
 
   useEffect(() => {
     const onResize = () => setMobile(window.innerWidth < 900);
@@ -362,34 +444,89 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
   const eu = participants.find((p) => p.isLocal);
   const meuNome = eu?.identity || "convidado";
 
-  function telaCheia() {
-    const el = videoRef.current;
-    if (!el) return;
-    if (el.requestFullscreen) el.requestFullscreen();
-    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  function telaCheia(el) {
+    const alvo = el || videoRef.current;
+    if (!alvo) return;
+    if (alvo.requestFullscreen) alvo.requestFullscreen();
+    else if (alvo.webkitRequestFullscreen) alvo.webkitRequestFullscreen();
   }
+
+  const transmitindo = localParticipant?.isScreenShareEnabled;
+  async function toggleTransmissao() {
+    try {
+      await localParticipant.setScreenShareEnabled(!transmitindo, { audio: true, selfBrowserSurface: "include" });
+    } catch (e) { alert("Nao foi possivel iniciar a transmissao: " + e.message); }
+  }
+
+  const BotaoTela = () => (
+    <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.04 }}
+      onClick={toggleTransmissao}
+      style={{ background: transmitindo ? "#f23f43" : "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", color: "#fff", borderRadius: 10, padding: "9px 14px", cursor: "pointer", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}
+      title={transmitindo ? "Parar transmissao" : "Transmitir tela (com som)"}>
+      {transmitindo ? "⏹ Parar" : "🖥 Transmitir"}
+    </motion.button>
+  );
+
+  // Audio invisivel: mic dos participantes + audio das transmissoes, com volume separado
+  const RenderAudio = () => (
+    <>
+      {micTracks.filter((t) => !t.participant.isLocal).map((t) => (
+        <AudioTrack key={"mic-" + t.publication.trackSid} trackRef={t}
+          volume={(micVol[t.participant.identity] ?? 100) / 100} />
+      ))}
+      {telaAudioTracks.filter((t) => !t.participant.isLocal).map((t) => (
+        <AudioTrack key={"tela-" + t.publication.trackSid} trackRef={t}
+          volume={telaMute[t.participant.identity] ? 0 : (telaVol[t.participant.identity] ?? 100) / 100} />
+      ))}
+    </>
+  );
 
   // ---- Bloco: area principal da call (transmissao + grid) ----
   const areaCall = (
     <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 24 }}>
       {screenShares.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          {screenShares.map((track) => (
-            <div key={track.publication.trackSid} style={{ position: "relative" }}>
-              <video
-                ref={(el) => { if (el) { track.publication.track?.attach(el); videoRef.current = el; } }}
-                autoPlay style={{ maxWidth: "100%", maxHeight: "65vh", objectFit: "contain", display: "block", margin: "0 auto", borderRadius: 12, background: "#000" }} />
-              <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.05 }}
-                onClick={telaCheia}
-                style={{ position: "absolute", bottom: 12, right: 12, background: "rgba(0,0,0,0.6)", border: "none", color: "#fff", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 16 }}
-                title="Tela cheia">⛶</motion.button>
-            </div>
-          ))}
+        <div style={{
+          marginBottom: 24, display: "grid", gap: 16,
+          gridTemplateColumns: screenShares.length > 1 ? "repeat(auto-fit, minmax(320px, 1fr))" : "1fr",
+        }}>
+          {screenShares.map((track) => {
+            const dono = track.participant.identity;
+            const temAudio = telaAudioTracks.some((a) => a.participant.identity === dono);
+            const mutado = telaMute[dono];
+            const vol = telaVol[dono] ?? 100;
+            return (
+              <div key={track.publication.trackSid} data-tela style={{ position: "relative", background: "#000", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ position: "absolute", top: 10, left: 12, zIndex: 2, background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 20 }}>
+                  🖥 {dono}
+                </div>
+                <video
+                  ref={(el) => { if (el) { track.publication.track?.attach(el); videoRef.current = el; } }}
+                  onClick={(e) => telaCheia(e.currentTarget)}
+                  autoPlay style={{ width: "100%", maxHeight: "60vh", objectFit: "contain", display: "block", background: "#000", cursor: "zoom-in" }} />
+                <div style={{ position: "absolute", bottom: 10, right: 10, zIndex: 2, display: "flex", alignItems: "center", gap: 8 }}>
+                  {temAudio && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,0.6)", borderRadius: 20, padding: "4px 10px" }}>
+                      <button onClick={() => setTelaMute((m) => ({ ...m, [dono]: !m[dono] }))}
+                        style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer", fontSize: 15 }}
+                        title={mutado ? "Ativar som" : "Silenciar som"}>{mutado ? "🔇" : "🔊"}</button>
+                      <input type="range" min="0" max="200" value={mutado ? 0 : vol}
+                        onChange={(e) => { const v = Number(e.target.value); setTelaVol((s) => ({ ...s, [dono]: v })); setTelaMute((m) => ({ ...m, [dono]: false })); }}
+                        style={{ width: 90, accentColor: "#7c3aed", cursor: "pointer" }} />
+                    </div>
+                  )}
+                  <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.05 }}
+                    onClick={(e) => { const cont = e.currentTarget.closest("div[data-tela]"); const v = cont && cont.querySelector("video"); telaCheia(v); }}
+                    style={{ background: "rgba(0,0,0,0.6)", border: "none", color: "#fff", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 16 }}
+                    title="Tela cheia">⛶</motion.button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
         <AnimatePresence>
-          {participants.map((p) => <Avatar key={p.sid} participant={p} avatarUrl={perfis[p.identity]} />)}
+          {participants.map((p) => <Avatar key={p.sid} participant={p} avatarUrl={perfis[p.identity]} onVolume={ajustarMic} />)}
         </AnimatePresence>
       </div>
     </div>
@@ -414,16 +551,22 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
 
           {areaCall}
 
-          <RoomAudioRenderer />
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(20,21,24,0.9)", flexShrink: 0 }}>
-            <ControlBar variation="minimal" controls={{ microphone: true, screenShare: true, camera: false, chat: false, leave: true }} />
+          <RenderAudio />
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(20,21,24,0.9)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", flexWrap: "wrap" }}>
+            <ControlBar variation="minimal" controls={{ microphone: true, screenShare: false, camera: false, chat: false, leave: true }} />
+            <BotaoTela />
           </div>
 
-          {chatAberto && (
-            <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "#2b2d31" }}>
-              <Chat salaId={salaId} meuNome={meuNome} mobile={true} onFechar={() => setChatAberto(false)} onImagem={setImagemAberta} />
-            </div>
-          )}
+          <AnimatePresence>
+            {chatAberto && (
+              <motion.div
+                initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
+                transition={{ type: "tween", duration: 0.22, ease: "easeInOut" }}
+                style={{ position: "fixed", inset: 0, zIndex: 50, background: "#2b2d31" }}>
+                <Chat salaId={salaId} meuNome={meuNome} mobile={true} onFechar={() => setChatAberto(false)} onImagem={setImagemAberta} />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <Lightbox imagem={imagemAberta} fechar={() => setImagemAberta(null)} />
         </div>
@@ -458,9 +601,10 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
             </div>
           </div>
 
-          <RoomAudioRenderer />
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(15,16,19,0.9)", flexShrink: 0 }}>
-            <ControlBar variation="minimal" controls={{ microphone: true, screenShare: true, camera: false, chat: false, leave: true }} />
+          <RenderAudio />
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(15,16,19,0.9)", flexShrink: 0, display: "flex", flexDirection: "column", gap: 8, padding: "8px 10px" }}>
+            <ControlBar variation="minimal" controls={{ microphone: true, screenShare: false, camera: false, chat: false, leave: true }} />
+            <BotaoTela />
           </div>
         </div>
 
@@ -474,11 +618,18 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
         </div>
 
         {/* Coluna 3: chat (recolhivel) */}
-        {!chatRecolhido && (
-          <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
-            <Chat salaId={salaId} meuNome={meuNome} mobile={false} onImagem={setImagemAberta} onRecolher={() => setChatRecolhido(true)} />
-          </div>
-        )}
+        <AnimatePresence initial={false}>
+          {!chatRecolhido && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }} animate={{ width: 340, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: "easeInOut" }}
+              style={{ flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
+              <div style={{ width: 340, height: "100%" }}>
+                <Chat salaId={salaId} meuNome={meuNome} mobile={false} onImagem={setImagemAberta} onRecolher={() => setChatRecolhido(true)} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {chatRecolhido && (
           <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.05 }}
             onClick={() => setChatRecolhido(false)}
