@@ -22,6 +22,7 @@ function corDoNome(nome) {
 function Avatar({ participant, avatarUrl, onVolume }) {
   const [falando, setFalando] = useState(participant.isSpeaking);
   const [mutado, setMutado] = useState(!participant.isMicrophoneEnabled);
+  const [transmitindo, setTransmitindo] = useState(participant.isScreenShareEnabled);
   useEffect(() => {
     const updateFala = () => setFalando(participant.isSpeaking);
     const updateTracks = () => { setMutado(!participant.isMicrophoneEnabled); setTransmitindo(participant.isScreenShareEnabled); };
