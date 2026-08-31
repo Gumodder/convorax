@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 import Login from "./Login";
 import Sala from "./Sala";
@@ -225,7 +225,7 @@ const s = {
   linha: { display: "flex", gap: 8, marginTop: 12 },
   input: { flex: 1, padding: 11, borderRadius: 8, border: "1px solid #2b2d31", background: "#1a1b1e", color: "#f2f3f5", fontSize: 14, minWidth: 0, outline: "none", boxSizing: "border-box" },
   btnGrad: { padding: "11px 22px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", color: "#fff", cursor: "pointer", fontWeight: 700, boxShadow: "0 4px 14px rgba(124,58,237,0.35)" },
-  btnCinza: { padding: "11px 22px", borderRadius: 8, border: "none", background: "#4e5058", color: "#fff", cursor: "pointer", fontWeight: 700 },
+  btnCinza: { padding: "11px 22px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #3b82f6, #06b6d4)", color: "#fff", cursor: "pointer", fontWeight: 700, boxShadow: "0 4px 14px rgba(59,130,246,0.3)" },
   aviso: { color: "#f0b232", fontSize: 14, marginBottom: 16 },
   grid: { display: "grid", gap: 16 },
   vazio: { gridColumn: "1 / -1", textAlign: "center", padding: "60px 0", color: "#f2f3f5" },
