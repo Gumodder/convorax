@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 import Login from "./Login";
 import Sala from "./Sala";
@@ -155,7 +155,7 @@ export default function App() {
               <input placeholder="Nome do servidor" value={novoNome}
                 onChange={(e) => setNovoNome(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && criarServidor()} style={s.input} />
-              <motion.button whileTap={{ scale: 0.95 }} onClick={criarServidor} style={{ ...s.btnGrad, width: mobile ? "100%" : "auto" }}>Criar</motion.button>
+              <motion.button whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.04 }} transition={{ type: "spring", stiffness: 400, damping: 15 }} onClick={criarServidor} style={{ ...s.btnGrad, width: mobile ? "100%" : "auto" }}>Criar</motion.button>
             </div>
           </div>
           <div style={s.cardAcao}>
@@ -164,7 +164,7 @@ export default function App() {
               <input placeholder="Ex: A3F9K2" value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && entrarPorCodigo()} style={s.input} />
-              <motion.button whileTap={{ scale: 0.95 }} onClick={entrarPorCodigo} style={{ ...s.btnCinza, width: mobile ? "100%" : "auto" }}>Entrar</motion.button>
+              <motion.button whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.04 }} transition={{ type: "spring", stiffness: 400, damping: 15 }} onClick={entrarPorCodigo} style={{ ...s.btnCinza, width: mobile ? "100%" : "auto" }}>Entrar</motion.button>
             </div>
           </div>
         </div>
@@ -200,7 +200,7 @@ export default function App() {
                     <span style={s.codLabel}>convite</span>
                     <span style={s.codigo}>{serv.codigo}</span>
                   </div>
-                  <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.03 }} onClick={() => entrarNaSala(serv)} style={s.btnEntrar}>Entrar na voz</motion.button>
+                  <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.05 }} transition={{ type: "spring", stiffness: 400, damping: 15 }} onClick={() => entrarNaSala(serv)} style={s.btnEntrar}>Entrar na voz</motion.button>
                 </motion.div>
               );
             })}

@@ -89,28 +89,20 @@ export default function MenuPerfil({ sessao }) {
     setEnviando(false);
   }
 
-  const foto = (tam, fonte) => (
-    <div style={{ width: tam, height: tam, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
-      {avatarUrl
-        ? <img src={avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-        : <span style={{ fontSize: fonte, fontWeight: 700, color: "#fff" }}>{inicial}</span>}
-    </div>
-  );
-
   const painelMobile = {
     position: "fixed", top: 0, left: 0, right: 0, bottom: 0, width: "100%", height: "100%",
-    background: "#0d0e11", padding: 20, zIndex: 200, overflowY: "auto",
+    background: "#0d0e11", zIndex: 200, overflowY: "auto",
   };
   const painelDesktop = {
-    position: "absolute", top: 54, right: 0, width: 300,
-    background: "rgba(24,25,28,0.97)", backdropFilter: "blur(10px)",
-    border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 16,
-    boxShadow: "0 12px 40px rgba(0,0,0,0.6)", zIndex: 100,
+    position: "absolute", top: 54, right: 0, width: 306,
+    background: "rgba(20,21,24,0.98)", backdropFilter: "blur(10px)",
+    border: "1px solid rgba(124,58,237,0.25)", borderRadius: 16, overflow: "hidden",
+    boxShadow: "0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(59,130,246,0.06)", zIndex: 100,
   };
 
   return (
     <div ref={boxRef} style={{ position: "relative" }}>
-      <motion.button whileTap={{ scale: 0.9 }} onClick={() => setAberto((v) => !v)} style={est.botaoFoto} title="Meu perfil">
+      <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.08 }} transition={{ type: "spring", stiffness: 400, damping: 15 }} onClick={() => setAberto((v) => !v)} style={est.botaoFoto} title="Meu perfil">
         {avatarUrl
           ? <img src={avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           : <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>{inicial}</span>}
@@ -125,55 +117,63 @@ export default function MenuPerfil({ sessao }) {
             transition={{ duration: 0.15 }}
             style={mobile ? painelMobile : painelDesktop}
           >
-            {mobile && (
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-                <button onClick={() => setAberto(false)} style={est.fechar} title="Fechar">✕</button>
-              </div>
-            )}
-            <div style={{ maxWidth: mobile ? 420 : "none", margin: "0 auto" }}>
-              <div style={est.topo}>
-                {foto(mobile ? 64 : 52, mobile ? 30 : 26)}
-                <div style={{ minWidth: 0 }}>
-                  <div style={est.nomeGrande}>{username ? "@" + username : "sem nome"}</div>
-                  <div style={est.emailValor}>{email}</div>
+            <div style={{ maxWidth: mobile ? 440 : "none", margin: "0 auto" }}>
+              {/* Faixa gradiente com a foto */}
+              <div style={est.capa}>
+                {mobile && (
+                  <button onClick={() => setAberto(false)} style={est.fechar} title="Fechar">✕</button>
+                )}
+                <div style={est.fotoWrap}>
+                  <div style={est.fotoGrande}>
+                    {avatarUrl
+                      ? <img src={avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : <span style={{ fontSize: 30, fontWeight: 700, color: "#fff" }}>{inicial}</span>}
+                  </div>
                 </div>
               </div>
 
-              <input ref={fileRef} type="file" accept="image/*,image/gif" onChange={trocarFoto} style={{ display: "none" }} />
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => fileRef.current?.click()} disabled={enviando} style={est.btnGrad}>
-                {enviando ? "..." : "Trocar foto de perfil"}
-              </motion.button>
+              <div style={{ padding: "44px 18px 18px" }}>
+                <div style={{ textAlign: "center", marginBottom: 16 }}>
+                  <div style={est.nomeGrande}>{username ? "@" + username : "sem nome"}</div>
+                  <div style={est.emailValor}>{email}</div>
+                </div>
 
-              <div style={est.divisor} />
-              <div style={est.secLabel}>NOME DE USUÁRIO</div>
-              <div style={{ position: "relative" }}>
-                <span style={est.arroba}>@</span>
-                <input placeholder="seunome" value={novoUser}
-                  onChange={(e) => setNovoUser(e.target.value.toLowerCase())}
-                  onKeyDown={(e) => e.key === "Enter" && salvarUsername()}
-                  style={{ ...est.input, paddingLeft: 26 }} />
+                <input ref={fileRef} type="file" accept="image/*,image/gif" onChange={trocarFoto} style={{ display: "none" }} />
+                <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.02 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={() => fileRef.current?.click()} disabled={enviando} style={est.btnGrad}>
+                  {enviando ? "..." : "Trocar foto de perfil"}
+                </motion.button>
+
+                <div style={est.divisor} />
+                <div style={est.secLabel}>NOME DE USUÁRIO</div>
+                <div style={{ position: "relative" }}>
+                  <span style={est.arroba}>@</span>
+                  <input placeholder="seunome" value={novoUser}
+                    onChange={(e) => setNovoUser(e.target.value.toLowerCase())}
+                    onKeyDown={(e) => e.key === "Enter" && salvarUsername()}
+                    style={{ ...est.input, paddingLeft: 26 }} />
+                </div>
+                <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.02 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={salvarUsername} disabled={enviando} style={est.btnGradSoft}>
+                  Salvar nome
+                </motion.button>
+                {msgUser && <p style={est.msg}>{msgUser}</p>}
+
+                <div style={est.divisor} />
+                <div style={est.secLabel}>TROCAR SENHA</div>
+                <input type="password" placeholder="Senha atual" value={senhaAtual}
+                  onChange={(e) => setSenhaAtual(e.target.value)} style={est.input} />
+                <input type="password" placeholder="Nova senha" value={novaSenha}
+                  onChange={(e) => setNovaSenha(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && trocarSenha()} style={est.input} />
+                <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.02 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={trocarSenha} disabled={enviando} style={est.btnGradSoft}>
+                  Salvar senha
+                </motion.button>
+                {msg && <p style={est.msg}>{msg}</p>}
+
+                <div style={est.divisor} />
+                <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.02 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={() => supabase.auth.signOut()} style={est.btnSair}>
+                  Sair da conta
+                </motion.button>
               </div>
-              <motion.button whileTap={{ scale: 0.97 }} onClick={salvarUsername} disabled={enviando} style={est.btnCinza}>
-                Salvar nome
-              </motion.button>
-              {msgUser && <p style={est.msg}>{msgUser}</p>}
-
-              <div style={est.divisor} />
-              <div style={est.secLabel}>TROCAR SENHA</div>
-              <input type="password" placeholder="Senha atual" value={senhaAtual}
-                onChange={(e) => setSenhaAtual(e.target.value)} style={est.input} />
-              <input type="password" placeholder="Nova senha" value={novaSenha}
-                onChange={(e) => setNovaSenha(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && trocarSenha()} style={est.input} />
-              <motion.button whileTap={{ scale: 0.97 }} onClick={trocarSenha} disabled={enviando} style={est.btnCinza}>
-                Salvar senha
-              </motion.button>
-              {msg && <p style={est.msg}>{msg}</p>}
-
-              <div style={est.divisor} />
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => supabase.auth.signOut()} style={est.btnSair}>
-                Sair da conta
-              </motion.button>
             </div>
           </motion.div>
         )}
@@ -183,17 +183,19 @@ export default function MenuPerfil({ sessao }) {
 }
 
 const est = {
-  botaoFoto: { width: 44, height: 44, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.12)", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", cursor: "pointer", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
-  fechar: { background: "rgba(255,255,255,0.08)", border: "none", color: "#f2f3f5", fontSize: 18, width: 36, height: 36, borderRadius: "50%", cursor: "pointer" },
-  topo: { display: "flex", gap: 12, alignItems: "center", marginBottom: 16 },
-  nomeGrande: { fontSize: 15, fontWeight: 700, color: "#f2f3f5" },
-  emailValor: { fontSize: 12, color: "#8b8f96", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  arroba: { position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#8b8f96", fontSize: 14, fontWeight: 600 },
+  botaoFoto: { width: 44, height: 44, borderRadius: "50%", border: "2px solid rgba(124,58,237,0.5)", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", cursor: "pointer", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
+  capa: { position: "relative", height: 72, background: "linear-gradient(135deg, #7c3aed, #3b82f6)" },
+  fechar: { position: "absolute", top: 12, right: 12, background: "rgba(0,0,0,0.25)", border: "none", color: "#fff", fontSize: 18, width: 36, height: 36, borderRadius: "50%", cursor: "pointer" },
+  fotoWrap: { position: "absolute", left: "50%", bottom: -34, transform: "translateX(-50%)" },
+  fotoGrande: { width: 72, height: 72, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "4px solid #141518", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  nomeGrande: { fontSize: 17, fontWeight: 800, color: "#f2f3f5" },
+  emailValor: { fontSize: 12, color: "#8b8f96", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 },
+  arroba: { position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#8b5cf6", fontSize: 14, fontWeight: 700 },
   divisor: { height: 1, background: "rgba(255,255,255,0.08)", margin: "14px 0" },
   secLabel: { fontSize: 10, fontWeight: 700, color: "#8b8f96", letterSpacing: 0.5, marginBottom: 8 },
   input: { width: "100%", padding: 11, borderRadius: 8, border: "1px solid #2b2d31", background: "#1a1b1e", color: "#f2f3f5", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 8 },
-  btnGrad: { width: "100%", padding: 11, borderRadius: 8, border: "none", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", color: "#fff", fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(124,58,237,0.3)" },
-  btnCinza: { width: "100%", padding: 11, borderRadius: 8, border: "none", background: "#4e5058", color: "#fff", fontWeight: 600, cursor: "pointer" },
+  btnGrad: { width: "100%", padding: 11, borderRadius: 8, border: "none", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", color: "#fff", fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(124,58,237,0.35)" },
+  btnGradSoft: { width: "100%", padding: 11, borderRadius: 8, border: "1px solid rgba(124,58,237,0.4)", background: "rgba(124,58,237,0.15)", color: "#c4b5fd", fontWeight: 700, cursor: "pointer" },
   btnSair: { width: "100%", padding: 11, borderRadius: 8, border: "1px solid rgba(242,63,67,0.3)", background: "rgba(242,63,67,0.12)", color: "#f77", fontWeight: 700, cursor: "pointer" },
   msg: { fontSize: 12, color: "#f0b232", marginTop: 8, textAlign: "center" },
 };
