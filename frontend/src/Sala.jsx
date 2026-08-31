@@ -17,6 +17,7 @@ function corDoNome(nome) {
   return CORES[Math.abs(h) % CORES.length];
 }
 
+// ---- Avatar grande (grid central) ----
 function Avatar({ participant, avatarUrl }) {
   const [falando, setFalando] = useState(participant.isSpeaking);
   const [mutado, setMutado] = useState(!participant.isMicrophoneEnabled);
@@ -104,6 +105,50 @@ function Avatar({ participant, avatarUrl }) {
   );
 }
 
+// ---- Item pequeno de participante (sidebar) ----
+function ParticipanteMini({ participant, avatarUrl }) {
+  const [falando, setFalando] = useState(participant.isSpeaking);
+  const [mutado, setMutado] = useState(!participant.isMicrophoneEnabled);
+  useEffect(() => {
+    const uf = () => setFalando(participant.isSpeaking);
+    const um = () => setMutado(!participant.isMicrophoneEnabled);
+    participant.on("isSpeakingChanged", uf);
+    participant.on("trackMuted", um);
+    participant.on("trackUnmuted", um);
+    participant.on("trackPublished", um);
+    participant.on("trackUnpublished", um);
+    um();
+    return () => {
+      participant.off("isSpeakingChanged", uf);
+      participant.off("trackMuted", um);
+      participant.off("trackUnmuted", um);
+      participant.off("trackPublished", um);
+      participant.off("trackUnpublished", um);
+    };
+  }, [participant]);
+  const nome = participant.identity || "?";
+  const cor = corDoNome(nome);
+  const ativo = falando && !mutado;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", borderRadius: 8, background: ativo ? "rgba(35,165,89,0.12)" : "transparent" }}>
+      <div style={{ position: "relative", width: 32, height: 32, flexShrink: 0 }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: "50%", overflow: "hidden",
+          background: `linear-gradient(135deg, ${cor}, ${cor}bb)`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 14, fontWeight: 700, color: "#fff",
+          boxShadow: ativo ? "0 0 0 2px #23a559" : "none",
+        }}>
+          {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : nome.charAt(0).toUpperCase()}
+        </div>
+      </div>
+      <span style={{ color: ativo ? "#f2f3f5" : "#b5bac1", fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{nome}</span>
+      {mutado && <span style={{ fontSize: 13 }} title="Mutado">🔇</span>}
+    </div>
+  );
+}
+
+// ---- Chat ----
 function Chat({ salaId, meuNome, onFechar, mobile, onImagem }) {
   const [mensagens, setMensagens] = useState([]);
   const [texto, setTexto] = useState("");
@@ -172,8 +217,8 @@ function Chat({ salaId, meuNome, onFechar, mobile, onImagem }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#2b2d31" }}>
-      <div style={{ padding: "14px 16px", borderBottom: "1px solid #1e1f22", color: "#f2f3f5", fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 10, background: "linear-gradient(135deg, rgba(124,58,237,0.15), rgba(59,130,246,0.15))" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: "#2b2d31" }}>
+      <div style={{ padding: "14px 16px", borderBottom: "1px solid #1e1f22", color: "#f2f3f5", fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 10, flexShrink: 0, background: "linear-gradient(135deg, rgba(124,58,237,0.15), rgba(59,130,246,0.15))" }}>
         {mobile && (
           <motion.button
             whileTap={{ scale: 0.85 }}
@@ -184,7 +229,7 @@ function Chat({ salaId, meuNome, onFechar, mobile, onImagem }) {
         )}
         💬 Chat
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
         {mensagens.map((m, i) => {
           const meu = m.autor === meuNome;
           const anterior = mensagens[i - 1];
@@ -226,7 +271,7 @@ function Chat({ salaId, meuNome, onFechar, mobile, onImagem }) {
         })}
         <div ref={fimRef} />
       </div>
-      <div style={{ padding: 12, borderTop: "1px solid #1e1f22", display: "flex", gap: 8, alignItems: "center" }}>
+      <div style={{ padding: 12, borderTop: "1px solid #1e1f22", display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
         <motion.button
           whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.05 }}
           onClick={() => fileRef.current?.click()}
@@ -240,7 +285,7 @@ function Chat({ salaId, meuNome, onFechar, mobile, onImagem }) {
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") enviarTexto(); }}
           placeholder="Mensagem..."
-          style={{ flex: 1, background: "#383a40", border: "none", color: "#dbdee1", borderRadius: 8, padding: "11px 12px", fontSize: 14, outline: "none" }}
+          style={{ flex: 1, minWidth: 0, background: "#383a40", border: "none", color: "#dbdee1", borderRadius: 8, padding: "11px 12px", fontSize: 14, outline: "none" }}
         />
         <motion.button
           whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.05 }}
@@ -253,7 +298,7 @@ function Chat({ salaId, meuNome, onFechar, mobile, onImagem }) {
   );
 }
 
-export default function Sala({ salaId, nomeServidor }) {
+export default function Sala({ salaId, nomeServidor, onSair }) {
   const participants = useParticipants();
   const screenShares = useTracks([Track.Source.ScreenShare]);
   const [chatAberto, setChatAberto] = useState(false);
@@ -268,7 +313,6 @@ export default function Sala({ salaId, nomeServidor }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Mapa: email_nome -> avatar_url (casa com o identity da call)
   useEffect(() => {
     supabase.from("perfis").select("email_nome, username, avatar_url").then(({ data }) => {
       if (!data) return;
@@ -293,84 +337,139 @@ export default function Sala({ salaId, nomeServidor }) {
     else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   }
 
-  return (
-    <LayoutContextProvider>
-      <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0d0e11", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: "-10%", left: "-8%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.12), transparent 70%)", filter: "blur(50px)", pointerEvents: "none" }} />
-        <div style={{ position: "absolute", bottom: "-10%", right: "-8%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(59,130,246,0.10), transparent 70%)", filter: "blur(50px)", pointerEvents: "none" }} />
-
-        <div style={{ position: "relative", zIndex: 1, padding: "16px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontWeight: 800, color: "#f2f3f5", fontSize: 16 }}>{nomeServidor}</span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#b5bac1", fontSize: 14, marginLeft: 8 }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#23a559", display: "inline-block", boxShadow: "0 0 8px #23a559" }} />
-            {participants.length} online
-          </span>
-          <motion.button
-            whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.04 }}
-            transition={{ type: "spring", stiffness: 400, damping: 15 }}
-            onClick={() => setChatAberto((v) => !v)}
-            style={{ marginLeft: "auto", background: chatAberto ? "#404249" : "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", color: "#fff", borderRadius: 10, padding: "9px 18px", cursor: "pointer", fontSize: 14, fontWeight: 700, boxShadow: chatAberto ? "none" : "0 3px 12px rgba(124,58,237,0.4)" }}
-          >{chatAberto ? "Fechar chat" : "💬 Chat"}</motion.button>
-        </div>
-
-        <div style={{ position: "relative", zIndex: 1, flex: 1, display: "flex", overflow: "hidden" }}>
-          <div style={{ flex: 1, overflow: "auto", padding: 24 }}>
-            {screenShares.length > 0 && (
-              <div style={{ marginBottom: 24, position: "relative" }}>
-                {screenShares.map((track) => (
-                  <div key={track.publication.trackSid} style={{ position: "relative" }}>
-                    <video
-                      ref={(el) => { if (el) { track.publication.track?.attach(el); videoRef.current = el; } }}
-                      autoPlay style={{ maxWidth: "100%", maxHeight: "65vh", objectFit: "contain", display: "block", margin: "0 auto", borderRadius: 12, background: "#000" }} />
-                    <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.05 }}
-                      onClick={telaCheia}
-                      style={{ position: "absolute", bottom: 12, right: 12, background: "rgba(0,0,0,0.6)", border: "none", color: "#fff", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 16 }}
-                      title="Tela cheia">⛶</motion.button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
-              <AnimatePresence>
-                {participants.map((p) => <Avatar key={p.sid} participant={p} avatarUrl={perfis[p.identity]} />)}
-              </AnimatePresence>
+  // ---- Bloco: area principal da call (transmissao + grid) ----
+  const areaCall = (
+    <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 24 }}>
+      {screenShares.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          {screenShares.map((track) => (
+            <div key={track.publication.trackSid} style={{ position: "relative" }}>
+              <video
+                ref={(el) => { if (el) { track.publication.track?.attach(el); videoRef.current = el; } }}
+                autoPlay style={{ maxWidth: "100%", maxHeight: "65vh", objectFit: "contain", display: "block", margin: "0 auto", borderRadius: 12, background: "#000" }} />
+              <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.05 }}
+                onClick={telaCheia}
+                style={{ position: "absolute", bottom: 12, right: 12, background: "rgba(0,0,0,0.6)", border: "none", color: "#fff", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 16 }}
+                title="Tela cheia">⛶</motion.button>
             </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
+        <AnimatePresence>
+          {participants.map((p) => <Avatar key={p.sid} participant={p} avatarUrl={perfis[p.identity]} />)}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+
+  // ================= MOBILE =================
+  if (mobile) {
+    return (
+      <LayoutContextProvider>
+        <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0d0e11" }}>
+          <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <span style={{ fontWeight: 800, color: "#f2f3f5", fontSize: 16 }}>{nomeServidor}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#b5bac1", fontSize: 13, marginLeft: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#23a559", display: "inline-block", boxShadow: "0 0 8px #23a559" }} />
+              {participants.length}
+            </span>
+            <motion.button whileTap={{ scale: 0.9 }}
+              onClick={() => setChatAberto(true)}
+              style={{ marginLeft: "auto", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", color: "#fff", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontSize: 14, fontWeight: 700, boxShadow: "0 3px 12px rgba(124,58,237,0.4)" }}
+            >💬 Chat</motion.button>
+          </div>
+
+          {areaCall}
+
+          <RoomAudioRenderer />
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(20,21,24,0.9)", flexShrink: 0 }}>
+            <ControlBar variation="minimal" controls={{ microphone: true, screenShare: true, camera: false, chat: false, leave: true }} />
           </div>
 
           {chatAberto && (
-            <div style={
-              mobile
-                ? { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, width: "100%", zIndex: 50, background: "#2b2d31" }
-                : { width: 340, flexShrink: 0, borderLeft: "1px solid #1e1f22" }
-            }>
-              <Chat salaId={salaId} meuNome={meuNome} mobile={mobile} onFechar={() => setChatAberto(false)} onImagem={setImagemAberta} />
+            <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "#2b2d31" }}>
+              <Chat salaId={salaId} meuNome={meuNome} mobile={true} onFechar={() => setChatAberto(false)} onImagem={setImagemAberta} />
             </div>
           )}
+
+          <Lightbox imagem={imagemAberta} fechar={() => setImagemAberta(null)} />
+        </div>
+      </LayoutContextProvider>
+    );
+  }
+
+  // ================= DESKTOP (3 colunas) =================
+  return (
+    <LayoutContextProvider>
+      <div style={{ height: "100vh", display: "flex", background: "#0d0e11", overflow: "hidden" }}>
+        {/* Coluna 1: servidor + canal + participantes */}
+        <div style={{ width: 250, flexShrink: 0, display: "flex", flexDirection: "column", background: "rgba(20,21,24,0.9)", borderRight: "1px solid rgba(255,255,255,0.06)" }}>
+          <div style={{ padding: "16px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <motion.button whileTap={{ scale: 0.85 }} onClick={onSair}
+              style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#f2f3f5", fontSize: 18, width: 34, height: 34, borderRadius: 8, cursor: "pointer", flexShrink: 0 }}
+              title="Sair do servidor">←</motion.button>
+            <span style={{ fontWeight: 800, color: "#f2f3f5", fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nomeServidor}</span>
+          </div>
+
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 10px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#8b8f96", letterSpacing: 0.5, padding: "0 8px", marginBottom: 8 }}>CANAIS DE VOZ</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: "linear-gradient(135deg, rgba(124,58,237,0.2), rgba(59,130,246,0.2))", color: "#f2f3f5", fontWeight: 700, fontSize: 14 }}>
+              🔊 Geral
+              <span style={{ marginLeft: "auto", fontSize: 12, color: "#23a559", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#23a559", boxShadow: "0 0 6px #23a559" }} />
+                {participants.length}
+              </span>
+            </div>
+            <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 2, paddingLeft: 4 }}>
+              {participants.map((p) => <ParticipanteMini key={p.sid} participant={p} avatarUrl={perfis[p.identity]} />)}
+            </div>
+          </div>
+
+          <RoomAudioRenderer />
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(15,16,19,0.9)", flexShrink: 0 }}>
+            <ControlBar variation="minimal" controls={{ microphone: true, screenShare: true, camera: false, chat: false, leave: true }} />
+          </div>
         </div>
 
-        <RoomAudioRenderer />
-        <div style={{ position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(20,21,24,0.9)", backdropFilter: "blur(8px)" }}>
-          <ControlBar variation="minimal" controls={{ microphone: true, screenShare: true, camera: false, chat: false, leave: true }} />
+        {/* Coluna 2: call central */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: "-10%", left: "-8%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.12), transparent 70%)", filter: "blur(50px)", pointerEvents: "none" }} />
+          <div style={{ position: "absolute", bottom: "-10%", right: "-8%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(59,130,246,0.10), transparent 70%)", filter: "blur(50px)", pointerEvents: "none" }} />
+          <div style={{ position: "relative", zIndex: 1, flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            {areaCall}
+          </div>
         </div>
 
-        {/* Lightbox de imagem */}
-        <AnimatePresence>
-          {imagemAberta && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setImagemAberta(null)}
-              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, cursor: "zoom-out" }}
-            >
-              <motion.img
-                initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
-                src={imagemAberta} alt=""
-                style={{ maxWidth: "95%", maxHeight: "95%", borderRadius: 8, objectFit: "contain" }} />
-              <button onClick={() => setImagemAberta(null)}
-                style={{ position: "fixed", top: 20, right: 20, background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", fontSize: 22, width: 44, height: 44, borderRadius: "50%", cursor: "pointer" }}>✕</button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Coluna 3: chat sempre visivel */}
+        <div style={{ width: 340, flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
+          <Chat salaId={salaId} meuNome={meuNome} mobile={false} onImagem={setImagemAberta} />
+        </div>
+
+        <Lightbox imagem={imagemAberta} fechar={() => setImagemAberta(null)} />
       </div>
     </LayoutContextProvider>
+  );
+}
+
+// ---- Lightbox de imagem ----
+function Lightbox({ imagem, fechar }) {
+  return (
+    <AnimatePresence>
+      {imagem && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={fechar}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, cursor: "zoom-out" }}
+        >
+          <motion.img
+            initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+            src={imagem} alt=""
+            style={{ maxWidth: "95%", maxHeight: "95%", borderRadius: 8, objectFit: "contain" }} />
+          <button onClick={fechar}
+            style={{ position: "fixed", top: 20, right: 20, background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", fontSize: 22, width: 44, height: 44, borderRadius: "50%", cursor: "pointer" }}>✕</button>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
