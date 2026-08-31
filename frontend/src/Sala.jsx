@@ -313,7 +313,7 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
             title="Fechar"
           >✕</motion.button>
         )}
-        <span style={{ color: "#8b8f96" }}>#</span> {mobile ? nomeCanal : "Chat"}
+        <span style={{ color: "#8b8f96" }}>#</span> {nomeCanal}
         {!mobile && onRecolher && (
           <motion.button whileTap={{ scale: 0.85 }} onClick={onRecolher}
             style={{ marginLeft: "auto", background: "rgba(255,255,255,0.08)", border: "none", color: "#f2f3f5", fontSize: 16, width: 30, height: 30, borderRadius: 8, cursor: "pointer" }}
@@ -670,7 +670,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
                 const sel = c.id === canalAtual;
                 return (
                   <motion.button key={c.id} whileTap={{ scale: 0.97 }}
-                    onClick={() => setCanalAtual(c.id)}
+                    onClick={() => { setCanalAtual(c.id); setChatRecolhido(false); setChatAberto(true); }}
                     style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600,
                       background: sel ? "linear-gradient(135deg, rgba(124,58,237,0.25), rgba(59,130,246,0.25))" : "transparent",
                       color: sel ? "#f2f3f5" : "#b5bac1" }}>
@@ -716,7 +716,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
               transition={{ duration: 0.25, ease: "easeInOut" }}
               style={{ flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
               <div style={{ width: 340, height: "100%" }}>
-                <Chat canalId={canalAtual} meuNome={meuNome} mobile={false} onImagem={setImagemAberta} onRecolher={() => setChatRecolhido(true)} />
+                <Chat canalId={canalAtual} meuNome={meuNome} mobile={false} onImagem={setImagemAberta} onRecolher={() => setChatRecolhido(true)} canais={canais} />
               </div>
             </motion.div>
           )}
