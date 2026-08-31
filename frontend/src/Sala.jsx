@@ -1,3 +1,4 @@
+
 import {
   useParticipants,
   useTracks,
@@ -82,7 +83,7 @@ function Avatar({ participant }) {
   );
 }
 
-function Chat({ salaId, meuNome }) {
+function Chat({ salaId, meuNome, onFechar, mobile }) {
   const [mensagens, setMensagens] = useState([]);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -151,7 +152,15 @@ function Chat({ salaId, meuNome }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#2b2d31" }}>
-      <div style={{ padding: "12px 16px", borderBottom: "1px solid #1e1f22", color: "#f2f3f5", fontWeight: 700, fontSize: 15 }}>
+      <div style={{ padding: "12px 16px", borderBottom: "1px solid #1e1f22", color: "#f2f3f5", fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 10 }}>
+        {mobile && (
+          <motion.button
+            whileTap={{ scale: 0.85 }}
+            onClick={onFechar}
+            style={{ background: "transparent", border: "none", color: "#f2f3f5", fontSize: 24, cursor: "pointer", padding: 0, lineHeight: 1, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}
+            title="Voltar"
+          >←</motion.button>
+        )}
         Chat
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -274,10 +283,10 @@ export default function Sala({ salaId, nomeServidor }) {
           {chatAberto && (
             <div style={
               mobile
-                ? { position: "fixed", top: 0, right: 0, bottom: 0, width: "100%", maxWidth: 400, zIndex: 50, boxShadow: "-4px 0 20px rgba(0,0,0,0.5)" }
+                ? { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, width: "100%", zIndex: 50, background: "#2b2d31" }
                 : { width: 340, flexShrink: 0, borderLeft: "1px solid #1e1f22" }
             }>
-              <Chat salaId={salaId} meuNome={meuNome} />
+              <Chat salaId={salaId} meuNome={meuNome} mobile={mobile} onFechar={() => setChatAberto(false)} />
             </div>
           )}
         </div>
