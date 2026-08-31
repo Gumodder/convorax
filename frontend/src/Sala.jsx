@@ -1,4 +1,3 @@
-
 import {
   useParticipants,
   useTracks,
@@ -19,7 +18,7 @@ function corDoNome(nome) {
   return CORES[Math.abs(h) % CORES.length];
 }
 
-function Avatar({ participant }) {
+function Avatar({ participant, avatarUrl }) {
   const [falando, setFalando] = useState(participant.isSpeaking);
   const [mutado, setMutado] = useState(!participant.isMicrophoneEnabled);
   useEffect(() => {
@@ -42,6 +41,7 @@ function Avatar({ participant }) {
   const nome = participant.identity || "?";
   const inicial = nome.charAt(0).toUpperCase();
   const cor = corDoNome(nome);
+  const ativo = falando && !mutado;
   return (
     <motion.div
       layout
@@ -53,8 +53,8 @@ function Avatar({ participant }) {
         display: "flex", flexDirection: "column", alignItems: "center",
         justifyContent: "center", background: "#2b2d31", borderRadius: 12,
         padding: 24, minHeight: 160, position: "relative",
-        boxShadow: falando && !mutado ? "0 0 0 3px #23a559" : "0 0 0 1px #1e1f22",
-        transition: "box-shadow 0.1s ease",
+        boxShadow: ativo ? "0 0 0 1px #23a559" : "0 0 0 1px #1e1f22",
+        transition: "box-shadow 0.15s ease",
       }}
     >
       {mutado && (
@@ -65,15 +65,36 @@ function Avatar({ participant }) {
           fontSize: 15, color: "#fff",
         }} title="Microfone silenciado">🔇</div>
       )}
-      <div style={{ position: "relative" }}>
+      <div style={{ position: "relative", width: 84, height: 84, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {/* Anel pulsante quando fala */}
+        <AnimatePresence>
+          {ativo && (
+            <motion.div
+              initial={{ opacity: 0, scale: 1 }}
+              animate={{ opacity: [0.6, 0], scale: [1, 1.35] }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "easeOut" }}
+              style={{ position: "absolute", width: 80, height: 80, borderRadius: "50%", border: "3px solid #23a559" }}
+            />
+          )}
+        </AnimatePresence>
+        <motion.div
+          animate={ativo ? { scale: [1, 1.06, 1] } : { scale: 1 }}
+          transition={ativo ? { duration: 0.6, repeat: Infinity } : { duration: 0.2 }}
+          style={{
+            width: 80, height: 80, borderRadius: "50%", overflow: "hidden",
+            background: `linear-gradient(135deg, ${cor}, ${cor}bb)`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 32, fontWeight: 700, color: "#fff",
+            boxShadow: ativo ? "0 0 18px rgba(35,165,89,0.6)" : "none",
+            position: "relative", zIndex: 1,
+          }}>
+          {avatarUrl
+            ? <img src={avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            : inicial}
+        </motion.div>
         <div style={{
-          width: 80, height: 80, borderRadius: "50%",
-          background: `linear-gradient(135deg, ${cor}, ${cor}bb)`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 32, fontWeight: 700, color: "#fff",
-        }}>{inicial}</div>
-        <div style={{
-          position: "absolute", bottom: 2, right: 2,
+          position: "absolute", bottom: 2, right: 2, zIndex: 2,
           width: 18, height: 18, borderRadius: "50%",
           background: "#23a559", border: "3px solid #2b2d31",
         }} title="Online" />
@@ -236,11 +257,22 @@ export default function Sala({ salaId, nomeServidor }) {
   const screenShares = useTracks([Track.Source.ScreenShare]);
   const [chatAberto, setChatAberto] = useState(false);
   const [mobile, setMobile] = useState(window.innerWidth < 900);
+  const [perfis, setPerfis] = useState({}); // username -> avatar_url
 
   useEffect(() => {
     const onResize = () => setMobile(window.innerWidth < 900);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Carrega mapa de perfis (username -> avatar) pra casar com o identity do participante
+  useEffect(() => {
+    supabase.from("perfis").select("username, avatar_url").then(({ data }) => {
+      if (!data) return;
+      const mapa = {};
+      data.forEach((p) => { if (p.username) mapa[p.username] = p.avatar_url; });
+      setPerfis(mapa);
+    });
   }, []);
 
   const eu = participants.find((p) => p.isLocal);
@@ -275,7 +307,7 @@ export default function Sala({ salaId, nomeServidor }) {
             )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
               <AnimatePresence>
-                {participants.map((p) => <Avatar key={p.sid} participant={p} />)}
+                {participants.map((p) => <Avatar key={p.sid} participant={p} avatarUrl={perfis[p.identity]} />)}
               </AnimatePresence>
             </div>
           </div>
