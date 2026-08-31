@@ -5,15 +5,18 @@ import { supabase } from "./supabase";
 export default function MenuPerfil({ sessao }) {
   const [aberto, setAberto] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [username, setUsername] = useState("");
+  const [novoUser, setNovoUser] = useState("");
   const [senhaAtual, setSenhaAtual] = useState("");
   const [novaSenha, setNovaSenha] = useState("");
   const [msg, setMsg] = useState("");
+  const [msgUser, setMsgUser] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [mobile, setMobile] = useState(window.innerWidth < 640);
   const fileRef = useRef(null);
   const boxRef = useRef(null);
   const email = sessao.user.email;
-  const inicial = email.charAt(0).toUpperCase();
+  const inicial = (username || email).charAt(0).toUpperCase();
 
   useEffect(() => {
     const onResize = () => setMobile(window.innerWidth < 640);
@@ -22,11 +25,13 @@ export default function MenuPerfil({ sessao }) {
   }, []);
 
   useEffect(() => {
-    supabase.from("perfis").select("avatar_url").eq("id", sessao.user.id).single()
-      .then(({ data }) => { if (data?.avatar_url) setAvatarUrl(data.avatar_url); });
+    supabase.from("perfis").select("avatar_url, username").eq("id", sessao.user.id).single()
+      .then(({ data }) => {
+        if (data?.avatar_url) setAvatarUrl(data.avatar_url);
+        if (data?.username) { setUsername(data.username); setNovoUser(data.username); }
+      });
   }, [sessao]);
 
-  // fecha ao clicar fora (so no desktop; no mobile usa o X)
   useEffect(() => {
     if (mobile) return;
     const fora = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setAberto(false); };
@@ -46,7 +51,7 @@ export default function MenuPerfil({ sessao }) {
         .from("avatares").upload(caminho, file, { upsert: true, contentType: file.type });
       if (upErr) throw upErr;
       const { data } = supabase.storage.from("avatares").getPublicUrl(caminho);
-      const url = data.publicUrl + "?t=" + Date.now(); // evita cache
+      const url = data.publicUrl + "?t=" + Date.now();
       await supabase.from("perfis").update({ avatar_url: url }).eq("id", sessao.user.id);
       setAvatarUrl(url);
       setMsg("Foto atualizada!");
@@ -58,15 +63,26 @@ export default function MenuPerfil({ sessao }) {
     }
   }
 
+  async function salvarUsername() {
+    setMsgUser("");
+    const alvo = novoUser.trim().toLowerCase();
+    if (!alvo || alvo === username) return;
+    setEnviando(true);
+    const { data, error } = await supabase.rpc("definir_username", { novo: alvo });
+    setEnviando(false);
+    if (error) { setMsgUser("Erro: " + error.message); return; }
+    if (data === "ok") { setUsername(alvo); setMsgUser("Nome salvo!"); }
+    else if (data === "em_uso") setMsgUser("Esse nome já está em uso");
+    else setMsgUser("Nome inválido (3-20, só letras, números, . e _)");
+  }
+
   async function trocarSenha() {
     setMsg("");
     if (!senhaAtual) { setMsg("Digite a senha atual"); return; }
     if (novaSenha.length < 6) { setMsg("Nova senha precisa de 6+ caracteres"); return; }
     setEnviando(true);
-    // 1) confere a senha atual reautenticando
     const { error: erroLogin } = await supabase.auth.signInWithPassword({ email, password: senhaAtual });
     if (erroLogin) { setMsg("Senha atual incorreta"); setEnviando(false); return; }
-    // 2) troca pela nova
     const { error } = await supabase.auth.updateUser({ password: novaSenha });
     if (error) setMsg("Erro: " + error.message);
     else { setMsg("Senha alterada!"); setSenhaAtual(""); setNovaSenha(""); }
@@ -118,7 +134,7 @@ export default function MenuPerfil({ sessao }) {
               <div style={est.topo}>
                 {foto(mobile ? 64 : 52, mobile ? 30 : 26)}
                 <div style={{ minWidth: 0 }}>
-                  <div style={est.emailLabel}>EMAIL</div>
+                  <div style={est.nomeGrande}>{username ? "@" + username : "sem nome"}</div>
                   <div style={est.emailValor}>{email}</div>
                 </div>
               </div>
@@ -127,6 +143,20 @@ export default function MenuPerfil({ sessao }) {
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => fileRef.current?.click()} disabled={enviando} style={est.btnGrad}>
                 {enviando ? "..." : "Trocar foto de perfil"}
               </motion.button>
+
+              <div style={est.divisor} />
+              <div style={est.secLabel}>NOME DE USUÁRIO</div>
+              <div style={{ position: "relative" }}>
+                <span style={est.arroba}>@</span>
+                <input placeholder="seunome" value={novoUser}
+                  onChange={(e) => setNovoUser(e.target.value.toLowerCase())}
+                  onKeyDown={(e) => e.key === "Enter" && salvarUsername()}
+                  style={{ ...est.input, paddingLeft: 26 }} />
+              </div>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={salvarUsername} disabled={enviando} style={est.btnCinza}>
+                Salvar nome
+              </motion.button>
+              {msgUser && <p style={est.msg}>{msgUser}</p>}
 
               <div style={est.divisor} />
               <div style={est.secLabel}>TROCAR SENHA</div>
@@ -138,7 +168,6 @@ export default function MenuPerfil({ sessao }) {
               <motion.button whileTap={{ scale: 0.97 }} onClick={trocarSenha} disabled={enviando} style={est.btnCinza}>
                 Salvar senha
               </motion.button>
-
               {msg && <p style={est.msg}>{msg}</p>}
 
               <div style={est.divisor} />
@@ -157,13 +186,14 @@ const est = {
   botaoFoto: { width: 44, height: 44, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.12)", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", cursor: "pointer", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
   fechar: { background: "rgba(255,255,255,0.08)", border: "none", color: "#f2f3f5", fontSize: 18, width: 36, height: 36, borderRadius: "50%", cursor: "pointer" },
   topo: { display: "flex", gap: 12, alignItems: "center", marginBottom: 16 },
-  emailLabel: { fontSize: 10, fontWeight: 700, color: "#8b8f96", letterSpacing: 0.5 },
-  emailValor: { fontSize: 13, color: "#f2f3f5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  nomeGrande: { fontSize: 15, fontWeight: 700, color: "#f2f3f5" },
+  emailValor: { fontSize: 12, color: "#8b8f96", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  arroba: { position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#8b8f96", fontSize: 14, fontWeight: 600 },
   divisor: { height: 1, background: "rgba(255,255,255,0.08)", margin: "14px 0" },
   secLabel: { fontSize: 10, fontWeight: 700, color: "#8b8f96", letterSpacing: 0.5, marginBottom: 8 },
   input: { width: "100%", padding: 11, borderRadius: 8, border: "1px solid #2b2d31", background: "#1a1b1e", color: "#f2f3f5", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 8 },
   btnGrad: { width: "100%", padding: 11, borderRadius: 8, border: "none", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", color: "#fff", fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(124,58,237,0.3)" },
   btnCinza: { width: "100%", padding: 11, borderRadius: 8, border: "none", background: "#4e5058", color: "#fff", fontWeight: 600, cursor: "pointer" },
   btnSair: { width: "100%", padding: 11, borderRadius: 8, border: "1px solid rgba(242,63,67,0.3)", background: "rgba(242,63,67,0.12)", color: "#f77", fontWeight: 700, cursor: "pointer" },
-  msg: { fontSize: 12, color: "#f0b232", marginTop: 10, textAlign: "center" },
+  msg: { fontSize: 12, color: "#f0b232", marginTop: 8, textAlign: "center" },
 };
