@@ -87,6 +87,10 @@ export default function App() {
   const [criandoServidor, setCriandoServidor] = useState(false);
   const [mobile, setMobile] = useState(window.innerWidth < 768);
   const [onlinePorSala, setOnlinePorSala] = useState({});
+  const [bugAberto, setBugAberto] = useState(false);   // modal reportar bug
+  const [bugTexto, setBugTexto] = useState("");
+  const [bugEnviando, setBugEnviando] = useState(false);
+  const [bugMsg, setBugMsg] = useState("");
   const presencaRef = useRef(null);
 
   useEffect(() => {
@@ -181,6 +185,40 @@ export default function App() {
     if (error) setAviso("Codigo invalido");
     else { setCodigo(""); setAviso(""); carregarServidores(); }
   }
+  async function apagarServidor(serv) {
+    if (!confirm(`Apagar o servidor "${serv.nome}"? Isso remove todos os canais e mensagens. Nao da pra desfazer.`)) return;
+    const { error } = await supabase.rpc("apagar_servidor", { p_id: serv.id });
+    if (error) { setAviso(error.message); return; }
+    setAviso("");
+    carregarServidores();
+  }
+  async function sairServidor(serv) {
+    if (!confirm(`Sair do servidor "${serv.nome}"?`)) return;
+    const { error } = await supabase.rpc("sair_do_servidor", { p_id: serv.id });
+    if (error) { setAviso(error.message); return; }
+    setAviso("");
+    carregarServidores();
+  }
+  async function enviarBug() {
+    const t = bugTexto.trim();
+    if (!t) return;
+    setBugEnviando(true); setBugMsg("");
+    try {
+      const r = await fetch("https://api.convorax.space/reportar-bug", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto: t, autor: sessao.user.email }),
+      });
+      if (!r.ok) throw new Error();
+      setBugMsg("Enviado! Valeu 🙌");
+      setBugTexto("");
+      setTimeout(() => { setBugAberto(false); setBugMsg(""); }, 1200);
+    } catch {
+      setBugMsg("Erro ao enviar. Tenta de novo.");
+    } finally {
+      setBugEnviando(false);
+    }
+  }
   async function entrarNaSala(servidor) {
     const nome = sessao.user.email.split("@")[0];
     const res = await fetch(`https://api.convorax.space/token?room=${servidor.id}&name=${nome}`);
@@ -236,6 +274,11 @@ export default function App() {
             <h1 style={{ ...s.h1, fontSize: mobile ? 24 : 28 }}>Servidores</h1>
             <p style={{ ...s.email, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessao.user.email}</p>
           </div>
+          <motion.button whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.05 }}
+            onClick={() => setBugAberto(true)}
+            style={s.btnBug} title="Reportar um bug">
+            🐛 {!mobile && "Reportar bug"}
+          </motion.button>
           <MenuPerfil sessao={sessao} />
         </header>
 
@@ -281,6 +324,15 @@ export default function App() {
                   whileHover={{ y: -4, boxShadow: "0 12px 30px rgba(124,58,237,0.25)" }}
                   transition={{ type: "spring", stiffness: 300, damping: 25 }}
                   style={s.cardServ}>
+                  {serv.dono_id === sessao.user.id ? (
+                    <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.1 }}
+                      onClick={() => apagarServidor(serv)}
+                      style={s.btnCanto} title="Apagar servidor (voce e o dono)">🗑</motion.button>
+                  ) : (
+                    <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.1 }}
+                      onClick={() => sairServidor(serv)}
+                      style={s.btnCanto} title="Sair do servidor">🚪</motion.button>
+                  )}
                   <div style={s.avatar}>
                     {serv.avatar_url
                       ? <img src={serv.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -309,6 +361,39 @@ export default function App() {
             onCriar={finalizarCriacao} onFechar={() => !criandoServidor && setCriarFotoAberto(false)} />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {bugAberto && (
+          <div onClick={() => !bugEnviando && setBugAberto(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <motion.div onClick={(e) => e.stopPropagation()}
+              initial={{ scale: 0.94, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.94, opacity: 0 }}
+              style={{ width: "100%", maxWidth: 420, background: "#141518", borderRadius: 16, border: "1px solid rgba(240,178,50,0.35)", overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,0.6)" }}>
+              <div style={{ height: 54, background: "linear-gradient(135deg, #f0b232, #f59e0b)", display: "flex", alignItems: "center", padding: "0 18px" }}>
+                <span style={{ fontWeight: 800, color: "#1a1b1e", fontSize: 16 }}>🐛 Reportar bug</span>
+              </div>
+              <div style={{ padding: 20 }}>
+                <p style={{ color: "#b5bac1", fontSize: 13, marginBottom: 12 }}>Achou algo quebrado ou estranho? Descreve aqui que a gente conserta.</p>
+                <textarea value={bugTexto} onChange={(e) => setBugTexto(e.target.value)}
+                  placeholder="Ex: quando mexo no volume trava... / o botao X nao funciona no celular..."
+                  maxLength={2000}
+                  style={{ width: "100%", minHeight: 120, resize: "vertical", padding: 12, borderRadius: 8, border: "1px solid #2b2d31", background: "#1a1b1e", color: "#f2f3f5", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
+                {bugMsg && <p style={{ fontSize: 13, color: bugMsg.startsWith("Erro") ? "#f23f43" : "#23a559", marginTop: 10 }}>{bugMsg}</p>}
+                <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                  <button onClick={() => setBugAberto(false)} disabled={bugEnviando}
+                    style={{ flex: 1, padding: 12, borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "#b5bac1", fontWeight: 700, cursor: "pointer" }}>
+                    Cancelar
+                  </button>
+                  <motion.button whileTap={{ scale: 0.96 }} onClick={enviarBug} disabled={bugEnviando || !bugTexto.trim()}
+                    style={{ flex: 1, padding: 12, borderRadius: 8, border: "none", background: "linear-gradient(135deg, #f0b232, #f59e0b)", color: "#1a1b1e", fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 14px rgba(240,178,50,0.35)", opacity: (bugEnviando || !bugTexto.trim()) ? 0.6 : 1 }}>
+                    {bugEnviando ? "Enviando..." : "Enviar"}
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -331,7 +416,9 @@ const s = {
   aviso: { color: "#f0b232", fontSize: 14, marginBottom: 16 },
   grid: { display: "grid", gap: 16 },
   vazio: { gridColumn: "1 / -1", textAlign: "center", padding: "60px 0", color: "#f2f3f5" },
-  cardServ: { background: "rgba(30,31,34,0.7)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.06)", padding: 22, borderRadius: 14, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" },
+  cardServ: { position: "relative", background: "rgba(30,31,34,0.7)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.06)", padding: 22, borderRadius: 14, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" },
+  btnBug: { flexShrink: 0, padding: "9px 14px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #f0b232, #f59e0b)", color: "#1a1b1e", cursor: "pointer", fontWeight: 800, fontSize: 14, boxShadow: "0 3px 12px rgba(240,178,50,0.35)", display: "flex", alignItems: "center", gap: 6 },
+  btnCanto: { position: "absolute", top: 10, right: 10, zIndex: 2, width: 30, height: 30, borderRadius: 8, border: "none", background: "rgba(0,0,0,0.35)", color: "#fff", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 },
   avatar: { width: 66, height: 66, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 27, fontWeight: 700, color: "#fff", boxShadow: "0 4px 16px rgba(124,58,237,0.4)", overflow: "hidden" },
   nomeServ: { fontSize: 17, fontWeight: 700, marginTop: 12, color: "#f2f3f5" },
   onlineBox: { display: "flex", alignItems: "center", gap: 6, marginTop: 8 },
