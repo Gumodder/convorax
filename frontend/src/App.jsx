@@ -88,6 +88,7 @@ export default function App() {
   const [mobile, setMobile] = useState(window.innerWidth < 768);
   const [onlinePorSala, setOnlinePorSala] = useState({});
   const [meuUsername, setMeuUsername] = useState("");   // username do perfil (cai no email se vazio)
+  const [bannerFechado, setBannerFechado] = useState(false); // banner de anuncio no rodape
   const [bugAberto, setBugAberto] = useState(false);   // modal reportar bug
   const [bugTexto, setBugTexto] = useState("");
   const [bugEnviando, setBugEnviando] = useState(false);
@@ -277,7 +278,7 @@ export default function App() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        style={{ position: "relative", zIndex: 1, padding: mobile ? "20px 16px" : "32px 48px", maxWidth: 1200, margin: "0 auto" }}
+        style={{ position: "relative", zIndex: 1, padding: mobile ? "20px 16px" : "32px 48px", paddingBottom: bannerFechado ? undefined : (mobile ? 120 : 160), maxWidth: 1200, margin: "0 auto" }}
       >
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
           <img src="/logo.png" alt="Convorax" style={{ height: mobile ? 52 : 68 }}
@@ -407,6 +408,41 @@ export default function App() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {!bannerFechado && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 260, damping: 28 }}
+            style={{
+              position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 200,
+              display: "flex", justifyContent: "center",
+              padding: mobile ? "0 8px 8px" : "0 16px 14px",
+              pointerEvents: "none",
+            }}
+          >
+            <div style={{ position: "relative", width: "100%", maxWidth: 1200, pointerEvents: "auto" }}>
+              <a href="https://t.me/gladepaybot" target="_blank" rel="noreferrer"
+                style={{ display: "block", borderRadius: 12, overflow: "hidden", boxShadow: "0 8px 30px rgba(0,0,0,0.5)", border: "1px solid rgba(59,130,246,0.35)" }}>
+                <img src="https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/banneranuncio.png"
+                  alt="GladePay - Receba pagamento pelo Telegram"
+                  style={{ display: "block", width: "100%", height: "auto", objectFit: "cover" }}
+                  onError={(e) => { e.currentTarget.closest("div").parentElement.style.display = "none"; }} />
+              </a>
+              <button onClick={() => setBannerFechado(true)} title="Fechar anuncio"
+                style={{
+                  position: "absolute", top: -10, right: -10, zIndex: 2,
+                  width: 30, height: 30, borderRadius: "50%", border: "2px solid #0d0e11",
+                  background: "#1a1b1e", color: "#fff", cursor: "pointer", fontSize: 15,
+                  display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
+                }}>✕</button>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
