@@ -9,6 +9,72 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const LIVEKIT_URL = "wss://voz.convorax.space";
 
+// ---- Modal: foto opcional ao criar servidor ----
+function FotoNovoServidor({ nome, onCriar, onFechar, criando }) {
+  const [avatar, setAvatar] = useState("");      // url já enviada
+  const [subindo, setSubindo] = useState(false);
+  const [msg, setMsg] = useState("");
+  const fileRef = useRef(null);
+
+  async function escolherFoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSubindo(true); setMsg("");
+    try {
+      const tipoExt = { "image/gif": "gif", "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/avif": "avif" };
+      const ext = tipoExt[file.type] || "png";
+      const caminho = `servidores/novo-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("avatares").upload(caminho, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from("avatares").getPublicUrl(caminho);
+      setAvatar(data.publicUrl + "?t=" + Date.now());
+    } catch (err) {
+      setMsg("Erro na foto: " + err.message);
+    } finally {
+      setSubindo(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  return (
+    <div onClick={onFechar}
+      style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <motion.div onClick={(e) => e.stopPropagation()}
+        initial={{ scale: 0.94, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        style={{ width: "100%", maxWidth: 360, background: "#141518", borderRadius: 16, border: "1px solid rgba(124,58,237,0.25)", overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,0.6)" }}>
+        <div style={{ height: 60, background: "linear-gradient(135deg, #7c3aed, #3b82f6)", display: "flex", alignItems: "center", padding: "0 18px" }}>
+          <span style={{ fontWeight: 800, color: "#fff", fontSize: 16 }}>Foto do servidor</span>
+        </div>
+        <div style={{ padding: 20, textAlign: "center" }}>
+          <p style={{ color: "#b5bac1", fontSize: 13, marginBottom: 16 }}>Quer colocar uma foto em <b style={{ color: "#f2f3f5" }}>{nome}</b>? (opcional)</p>
+          <div onClick={() => !subindo && fileRef.current?.click()}
+            style={{ width: 96, height: 96, borderRadius: "50%", margin: "0 auto 18px", background: avatar ? "#000" : "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "3px solid #2b2d31", overflow: "hidden", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}
+            title="Escolher foto">
+            {avatar
+              ? <img src={avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <span style={{ color: "#fff", fontSize: 34, fontWeight: 800 }}>{(nome || "?").charAt(0).toUpperCase()}</span>}
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 10, padding: "2px 0" }}>{subindo ? "..." : "escolher"}</div>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*,image/gif" onChange={escolherFoto} style={{ display: "none" }} />
+          {msg && <p style={{ fontSize: 12, color: "#f0b232", marginBottom: 12 }}>{msg}</p>}
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => onCriar(null)} disabled={criando || subindo}
+              style={{ flex: 1, padding: 12, borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "#b5bac1", fontWeight: 700, cursor: "pointer" }}>
+              Pular
+            </button>
+            <motion.button whileTap={{ scale: 0.96 }} onClick={() => onCriar(avatar || null)} disabled={criando || subindo}
+              style={{ flex: 1, padding: 12, borderRadius: 8, border: "none", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", color: "#fff", fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(124,58,237,0.35)" }}>
+              {criando ? "..." : "Criar"}
+            </motion.button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 export default function App() {
   const [sessao, setSessao] = useState(null);
   const [servidores, setServidores] = useState([]);
@@ -17,6 +83,8 @@ export default function App() {
   const [novoNome, setNovoNome] = useState("");
   const [codigo, setCodigo] = useState("");
   const [aviso, setAviso] = useState("");
+  const [criarFotoAberto, setCriarFotoAberto] = useState(false); // modal de foto na criação
+  const [criandoServidor, setCriandoServidor] = useState(false);
   const [mobile, setMobile] = useState(window.innerWidth < 768);
   const [onlinePorSala, setOnlinePorSala] = useState({});
   const presencaRef = useRef(null);
@@ -78,11 +146,34 @@ export default function App() {
     const { data } = await supabase.from("servidores").select("*");
     setServidores(data || []);
   }
-  async function criarServidor() {
-    if (!novoNome) return;
-    const { error } = await supabase.rpc("criar_servidor", { nome_servidor: novoNome });
-    if (error) setAviso(error.message);
-    else { setNovoNome(""); setAviso(""); carregarServidores(); }
+  function criarServidor() {
+    if (!novoNome.trim()) return;
+    setAviso("");
+    setCriarFotoAberto(true); // abre o modal perguntando a foto
+  }
+
+  // Cria o servidor de fato. avatarUrl pode ser null (pulou a foto).
+  async function finalizarCriacao(avatarUrl) {
+    setCriandoServidor(true);
+    const { data: novoId, error } = await supabase.rpc("criar_servidor", { nome_servidor: novoNome.trim() });
+    if (error) { setAviso(error.message); setCriandoServidor(false); return false; }
+    // se escolheu foto, salva via editar_servidor (precisa do id do servidor recém-criado)
+    if (avatarUrl) {
+      // descobre o id: criar_servidor pode retornar o id, senão busca pelo nome mais recente
+      let id = (novoId && (novoId.id || novoId)) || null;
+      if (!id) {
+        const { data: achado } = await supabase
+          .from("servidores").select("id").eq("nome", novoNome.trim())
+          .order("criado_em", { ascending: false }).limit(1).single();
+        id = achado?.id;
+      }
+      if (id) await supabase.rpc("editar_servidor", { p_id: id, p_nome: novoNome.trim(), p_avatar_url: avatarUrl });
+    }
+    setNovoNome("");
+    setCriarFotoAberto(false);
+    setCriandoServidor(false);
+    carregarServidores();
+    return true;
   }
   async function entrarPorCodigo() {
     if (!codigo) return;
@@ -190,7 +281,11 @@ export default function App() {
                   whileHover={{ y: -4, boxShadow: "0 12px 30px rgba(124,58,237,0.25)" }}
                   transition={{ type: "spring", stiffness: 300, damping: 25 }}
                   style={s.cardServ}>
-                  <div style={s.avatar}>{inicial(serv.nome)}</div>
+                  <div style={s.avatar}>
+                    {serv.avatar_url
+                      ? <img src={serv.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : inicial(serv.nome)}
+                  </div>
                   <h3 style={s.nomeServ}>{serv.nome}</h3>
                   <div style={s.onlineBox}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: online > 0 ? "#23a559" : "#80848e", display: "inline-block", boxShadow: online > 0 ? "0 0 8px #23a559" : "none" }} />
@@ -207,6 +302,13 @@ export default function App() {
           </AnimatePresence>
         </div>
       </motion.div>
+
+      <AnimatePresence>
+        {criarFotoAberto && (
+          <FotoNovoServidor nome={novoNome.trim()} criando={criandoServidor}
+            onCriar={finalizarCriacao} onFechar={() => !criandoServidor && setCriarFotoAberto(false)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -230,7 +332,7 @@ const s = {
   grid: { display: "grid", gap: 16 },
   vazio: { gridColumn: "1 / -1", textAlign: "center", padding: "60px 0", color: "#f2f3f5" },
   cardServ: { background: "rgba(30,31,34,0.7)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.06)", padding: 22, borderRadius: 14, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" },
-  avatar: { width: 66, height: 66, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 27, fontWeight: 700, color: "#fff", boxShadow: "0 4px 16px rgba(124,58,237,0.4)" },
+  avatar: { width: 66, height: 66, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 27, fontWeight: 700, color: "#fff", boxShadow: "0 4px 16px rgba(124,58,237,0.4)", overflow: "hidden" },
   nomeServ: { fontSize: 17, fontWeight: 700, marginTop: 12, color: "#f2f3f5" },
   onlineBox: { display: "flex", alignItems: "center", gap: 6, marginTop: 8 },
   codBox: { display: "flex", flexDirection: "column", alignItems: "center", background: "#1a1b1e", padding: "6px 14px", borderRadius: 8, marginTop: 12, border: "1px solid rgba(255,255,255,0.05)" },
