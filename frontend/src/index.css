@@ -4,11 +4,18 @@
   box-sizing: border-box;
 }
 
+html, body {
+  height: 100%;
+}
+
 body {
   font-family: "gg sans", "Segoe UI", system-ui, -apple-system, sans-serif;
   background: #313338;
   color: #f2f3f5;
   -webkit-font-smoothing: antialiased;
+  /* trava o "balanço" de scroll no iOS e evita a barra dando zoom no layout */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
 }
 
 ::-webkit-scrollbar {
@@ -25,7 +32,7 @@ body {
   background: #111214;
 }
 
-input, button {
+input, button, textarea {
   font-family: inherit;
 }
 
@@ -38,6 +45,16 @@ button {
 }
 button:active {
   transform: scale(0.98);
+}
+
+/*
+  iOS Safari dá ZOOM automático em qualquer input/textarea com fonte < 16px.
+  Forçar 16px no foco (em telas de toque) elimina o zoom ao tocar pra digitar.
+*/
+@media (max-width: 900px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
 }
 
 /* Responsividade mobile */

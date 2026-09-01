@@ -445,7 +445,7 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
           </motion.div>
         )}
       </AnimatePresence>
-      <div style={{ padding: 12, borderTop: "1px solid #1e1f22", display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+      <div style={{ padding: 12, paddingBottom: mobile ? "calc(12px + env(safe-area-inset-bottom))" : 12, borderTop: "1px solid #1e1f22", display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
         <motion.button
           whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.05 }}
           onClick={() => fileRef.current?.click()}
@@ -713,24 +713,31 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
       try { await localParticipant.setCameraEnabled(!camOn); } catch (e) { alert("Nao foi possivel ligar a camera: " + e.message); }
     }
 
-    const btnBase = { border: "none", borderRadius: 12, padding: "10px 16px", cursor: "pointer", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", gap: 8, color: "#fff" };
+    const btnBase = { border: "none", borderRadius: 12, padding: "12px 16px", cursor: "pointer", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#fff", width: "100%" };
+    const wrap = mobile
+      ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxWidth: 460, margin: "0 auto" }
+      : { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "center" };
     return (
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
-        <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.04 }} onClick={toggleMic}
+      <div style={wrap}>
+        <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.04 }} onClick={toggleMic}
           style={{ ...btnBase, background: micOn ? "rgba(255,255,255,0.1)" : "#f23f43" }}
           title={micOn ? "Silenciar microfone" : "Ativar microfone"}>
           {micOn ? "🎤" : "🔇"} <span>{micOn ? "Microfone" : "Mutado"}</span>
         </motion.button>
 
-        <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.04 }} onClick={toggleCam}
+        <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.04 }} onClick={toggleCam}
           style={{ ...btnBase, background: camOn ? "linear-gradient(135deg, #7c3aed, #3b82f6)" : "rgba(255,255,255,0.1)" }}
           title={camOn ? "Desligar câmera" : "Ligar câmera"}>
           {camOn ? "📹" : "📷"} <span>{camOn ? "Câmera on" : "Câmera"}</span>
         </motion.button>
 
-        <BotaoTela />
+        <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.04 }} onClick={toggleTransmissao}
+          style={{ ...btnBase, background: transmitindo ? "#f23f43" : "linear-gradient(135deg, #7c3aed, #3b82f6)" }}
+          title={transmitindo ? "Parar transmissao" : "Transmitir tela (com som)"}>
+          {transmitindo ? "⏹" : "🖥"} <span>{transmitindo ? "Parar" : "Transmitir"}</span>
+        </motion.button>
 
-        <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.04 }} onClick={onSair}
+        <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.04 }} onClick={onSair}
           style={{ ...btnBase, background: "rgba(242,63,67,0.15)", color: "#f77", border: "1px solid rgba(242,63,67,0.3)" }}
           title="Sair da call">
           🚪 <span>Sair</span>
@@ -808,30 +815,30 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
   if (mobile) {
     return (
       <LayoutContextProvider>
-        <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0d0e11" }}>
-          <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+        <div style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#0d0e11" }}>
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <div onClick={() => souDono && setEditarAberto(true)}
-              style={{ display: "flex", alignItems: "center", gap: 8, cursor: souDono ? "pointer" : "default" }}>
-              {srvAvatar && (
-                <img src={srvAvatar} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-              )}
-              <span style={{ fontWeight: 800, color: "#f2f3f5", fontSize: 16 }}>{srvNome}</span>
-              {souDono && <span style={{ color: "#8b8f96", fontSize: 11 }}>✏️</span>}
+              style={{ display: "flex", alignItems: "center", gap: 8, cursor: souDono ? "pointer" : "default", minWidth: 0, flex: 1 }}>
+              {srvAvatar
+                ? <img src={srvAvatar} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                : <div style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0, background: "linear-gradient(135deg, #7c3aed, #3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 15 }}>{(srvNome || "?").charAt(0).toUpperCase()}</div>}
+              <span style={{ fontWeight: 800, color: "#f2f3f5", fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{srvNome}</span>
+              {souDono && <span style={{ color: "#8b8f96", fontSize: 12, flexShrink: 0 }}>✏️</span>}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#b5bac1", fontSize: 13, flexShrink: 0, marginLeft: 4 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#23a559", boxShadow: "0 0 8px #23a559" }} />
+                {participants.length}
+              </span>
             </div>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#b5bac1", fontSize: 13, marginLeft: 6 }}>
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#23a559", display: "inline-block", boxShadow: "0 0 8px #23a559" }} />
-              {participants.length}
-            </span>
             <motion.button whileTap={{ scale: 0.9 }}
               onClick={() => setChatAberto(true)}
-              style={{ marginLeft: "auto", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", color: "#fff", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontSize: 14, fontWeight: 700, boxShadow: "0 3px 12px rgba(124,58,237,0.4)" }}
+              style={{ flexShrink: 0, background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", color: "#fff", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontSize: 14, fontWeight: 700, boxShadow: "0 3px 12px rgba(124,58,237,0.4)" }}
             >💬 Chat</motion.button>
           </div>
 
           {areaCall}
 
           <RenderAudio />
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(20,21,24,0.9)", flexShrink: 0, padding: "10px 12px" }}>
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(20,21,24,0.9)", flexShrink: 0, padding: "10px 12px", paddingBottom: "calc(10px + env(safe-area-inset-bottom))" }}>
             <BarraControles />
           </div>
 
@@ -840,7 +847,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
               <motion.div
                 initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
                 transition={{ type: "tween", duration: 0.22, ease: "easeInOut" }}
-                style={{ position: "fixed", inset: 0, zIndex: 50, background: "#2b2d31" }}>
+                style={{ position: "fixed", inset: 0, height: "100dvh", zIndex: 50, background: "#2b2d31", display: "flex", flexDirection: "column" }}>
                 <Chat canalId={canalAtual} meuNome={meuNome} mobile={true} onFechar={() => setChatAberto(false)} onImagem={setImagemAberta}
                   canais={canais} canalAtual={canalAtual} onTrocarCanal={setCanalAtual} onCriarCanal={criarCanal} criandoCanal={criandoCanal} souDono={souDono} />
               </motion.div>
@@ -861,7 +868,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
   // ================= DESKTOP (3 colunas) =================
   return (
     <LayoutContextProvider>
-      <div style={{ height: "100vh", display: "flex", background: "#0d0e11", overflow: "hidden" }}>
+      <div style={{ height: "100dvh", display: "flex", background: "#0d0e11", overflow: "hidden" }}>
         {/* Coluna 1: servidor + canal + participantes */}
         <div style={{ width: 250, flexShrink: 0, display: "flex", flexDirection: "column", background: "rgba(20,21,24,0.9)", borderRight: "1px solid rgba(255,255,255,0.06)" }}>
           <div style={{ padding: "16px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>

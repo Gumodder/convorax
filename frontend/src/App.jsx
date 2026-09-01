@@ -231,10 +231,10 @@ export default function App() {
             onError={(e) => { e.currentTarget.style.display = "none"; }} />
         </div>
 
-        <header style={{ ...s.header, flexDirection: mobile ? "column" : "row", gap: mobile ? 12 : 0, alignItems: mobile ? "stretch" : "center" }}>
-          <div>
-            <h1 style={s.h1}>Servidores</h1>
-            <p style={s.email}>{sessao.user.email}</p>
+        <header style={{ ...s.header, flexDirection: "row", gap: 12, alignItems: "center" }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h1 style={{ ...s.h1, fontSize: mobile ? 24 : 28 }}>Servidores</h1>
+            <p style={{ ...s.email, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessao.user.email}</p>
           </div>
           <MenuPerfil sessao={sessao} />
         </header>
@@ -262,7 +262,7 @@ export default function App() {
 
         {aviso && <p style={s.aviso}>{aviso}</p>}
 
-        <div style={{ ...s.grid, gridTemplateColumns: mobile ? "repeat(auto-fill, minmax(150px, 1fr))" : "repeat(auto-fill, minmax(230px, 1fr))" }}>
+        <div style={{ ...s.grid, gridTemplateColumns: mobile ? "repeat(2, 1fr)" : "repeat(auto-fill, minmax(230px, 1fr))" }}>
           {servidores.length === 0 && (
             <div style={s.vazio}>
               <p style={{ fontSize: 18, fontWeight: 600 }}>Nenhum servidor ainda</p>
@@ -314,7 +314,7 @@ export default function App() {
 }
 
 const s = {
-  tela: { position: "relative", minHeight: "100vh", background: "#0d0e11", overflow: "hidden" },
+  tela: { position: "relative", minHeight: "100dvh", background: "#0d0e11", overflow: "hidden" },
   brilho1: { position: "absolute", top: "-10%", left: "-8%", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.22), transparent 70%)", filter: "blur(50px)", pointerEvents: "none" },
   brilho2: { position: "absolute", bottom: "-10%", right: "-8%", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(59,130,246,0.20), transparent 70%)", filter: "blur(50px)", pointerEvents: "none" },
   header: { display: "flex", justifyContent: "space-between", marginBottom: 28 },
