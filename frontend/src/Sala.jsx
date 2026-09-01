@@ -220,6 +220,7 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
   const [enviando, setEnviando] = useState(false);
   const [digitando, setDigitando] = useState([]); // nomes de quem esta digitando
   const [hoverMsg, setHoverMsg] = useState(null); // id da msg com mouse em cima
+  const [avisoFlood, setAvisoFlood] = useState(""); // aviso de rate limit
   const fimRef = useRef(null);
   const fileRef = useRef(null);
   const digCanalRef = useRef(null);
@@ -309,9 +310,19 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
     if (!t || !canalId) return;
     setTexto("");
     pareiDigitar();
-    await supabase.from("mensagens").insert({
+    const { error } = await supabase.from("mensagens").insert({
       canal_id: canalId, autor: meuNome, conteudo: t,
     });
+    if (error) {
+      if (error.message && error.message.includes("RATE_LIMIT")) {
+        setTexto(t); // devolve o texto pro campo
+        setAvisoFlood("Você está enviando rápido demais. Espere um instante.");
+        setTimeout(() => setAvisoFlood(""), 3000);
+      } else {
+        setAvisoFlood("Não foi possível enviar a mensagem.");
+        setTimeout(() => setAvisoFlood(""), 3000);
+      }
+    }
   }
 
   async function enviarArquivo(e) {
@@ -328,10 +339,16 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
         .from("chat-files").getPublicUrl(caminho);
       const tipo = file.type.startsWith("video") ? "video"
         : file.type.startsWith("image") ? "image" : "file";
-      await supabase.from("mensagens").insert({
+      const { error: msgErr } = await supabase.from("mensagens").insert({
         canal_id: canalId, autor: meuNome,
         arquivo_url: urlData.publicUrl, arquivo_tipo: tipo,
       });
+      if (msgErr) {
+        if (msgErr.message && msgErr.message.includes("RATE_LIMIT")) {
+          setAvisoFlood("Você está enviando rápido demais. Espere um instante.");
+          setTimeout(() => setAvisoFlood(""), 3000);
+        } else { throw msgErr; }
+      }
     } catch (err) {
       alert("Erro ao enviar arquivo: " + err.message);
     } finally {
@@ -445,6 +462,11 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
           </motion.div>
         )}
       </AnimatePresence>
+      {avisoFlood && (
+        <div style={{ padding: "8px 14px", background: "rgba(240,178,50,0.12)", borderTop: "1px solid rgba(240,178,50,0.3)", color: "#f0b232", fontSize: 13, fontWeight: 600, textAlign: "center", flexShrink: 0 }}>
+          ⏳ {avisoFlood}
+        </div>
+      )}
       <div style={{ padding: 12, paddingBottom: mobile ? "calc(12px + env(safe-area-inset-bottom))" : 12, borderTop: "1px solid #1e1f22", display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
         <motion.button
           whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.05 }}
