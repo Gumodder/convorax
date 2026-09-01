@@ -18,6 +18,14 @@ function corDoNome(nome) {
   return CORES[Math.abs(h) % CORES.length];
 }
 
+// hora HH:MM da mensagem (estilo WhatsApp)
+function horaMsg(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d)) return "";
+  return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
 // ---- Avatar grande (grid central) ----
 function Avatar({ participant, avatarUrl, onVolume }) {
   const [falando, setFalando] = useState(participant.isSpeaking);
@@ -83,6 +91,17 @@ function Avatar({ participant, avatarUrl, onVolume }) {
           <VideoTrack trackRef={{ participant, publication: camPub, source: Track.Source.Camera }}
             style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 60, background: "linear-gradient(transparent, rgba(0,0,0,0.75))" }} />
+          <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.08 }}
+            onClick={(e) => {
+              const card = e.currentTarget.closest("div");
+              const v = card && card.querySelector("video");
+              if (!v) return;
+              if (v.requestFullscreen) v.requestFullscreen();
+              else if (v.webkitRequestFullscreen) v.webkitRequestFullscreen();
+              else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen(); // iOS
+            }}
+            style={{ position: "absolute", top: 10, right: 10, zIndex: 4, background: "rgba(0,0,0,0.55)", border: "none", color: "#fff", borderRadius: 8, width: 34, height: 34, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}
+            title="Tela cheia">⛶</motion.button>
         </div>
       )}
       {mutado && (
@@ -437,6 +456,14 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
                 )}
                 {m.arquivo_tipo === "file" && (
                   <a href={m.arquivo_url} target="_blank" rel="noreferrer" style={{ color: "#fff", fontSize: 14, textDecoration: "underline" }}>Baixar arquivo</a>
+                )}
+                {horaMsg(m.created_at) && (
+                  <div style={{
+                    fontSize: 10, color: meu ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.45)",
+                    textAlign: "right", marginTop: 2, lineHeight: 1,
+                    paddingLeft: m.conteudo ? 8 : 6, paddingRight: m.conteudo ? 0 : 4,
+                    paddingBottom: m.conteudo ? 0 : 4,
+                  }}>{horaMsg(m.created_at)}</div>
                 )}
               </motion.div>
               </div>
