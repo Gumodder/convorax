@@ -769,7 +769,11 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
   };
 
   // Audio invisivel: mic dos participantes + audio das transmissoes, com volume separado
-  const RenderAudio = () => (
+  // IMPORTANTE: elemento JSX (nao componente <RenderAudio/>). Definir como componente
+  // dentro do componente fazia o React destruir e recriar todos os AudioTrack a cada
+  // render (ex: ao mexer no volume) -> cortava o audio da call. Como elemento, o React
+  // so atualiza a prop volume, sem re-anexar os tracks.
+  const renderAudio = (
     <>
       {micTracks.filter((t) => !t.participant.isLocal).map((t) => (
         <AudioTrack key={"mic-" + t.publication.trackSid} trackRef={t}
@@ -859,7 +863,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
 
           {areaCall}
 
-          <RenderAudio />
+          {renderAudio}
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(20,21,24,0.9)", flexShrink: 0, padding: "10px 12px", paddingBottom: "calc(10px + env(safe-area-inset-bottom))" }}>
             <BarraControles />
           </div>
@@ -943,7 +947,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
             </div>
           </div>
 
-          <RenderAudio />
+          {renderAudio}
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(15,16,19,0.9)", flexShrink: 0, padding: "12px 10px" }}>
             <BarraControles />
           </div>
