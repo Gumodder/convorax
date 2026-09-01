@@ -278,7 +278,7 @@ export default function App() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        style={{ position: "relative", zIndex: 1, padding: mobile ? "20px 16px" : "32px 48px", paddingBottom: bannerFechado ? undefined : (mobile ? 90 : 120), maxWidth: 1200, margin: "0 auto" }}
+        style={{ position: "relative", zIndex: 1, padding: mobile ? "20px 16px" : "32px 48px", paddingBottom: bannerFechado ? undefined : (mobile ? 110 : 190), maxWidth: 1200, margin: "0 auto" }}
       >
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
           <img src="/logo.png" alt="Convorax" style={{ height: mobile ? 52 : 68 }}
@@ -428,9 +428,9 @@ export default function App() {
             <div style={{ position: "relative", width: "100%", maxWidth: 1200, pointerEvents: "auto" }}>
               <a href="https://t.me/gladepaybot" target="_blank" rel="noreferrer"
                 style={{ display: "block", borderRadius: 12, overflow: "hidden", boxShadow: "0 8px 30px rgba(0,0,0,0.5)", border: "1px solid rgba(59,130,246,0.35)" }}>
-                <img src="https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/banneranuncio.png"
+                <img src="https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/anuncioglade.png"
                   alt="GladePay - Receba pagamento pelo Telegram"
-                  style={{ display: "block", width: "100%", height: mobile ? 64 : 90, objectFit: "cover", objectPosition: "center" }}
+                  style={{ display: "block", width: "100%", height: "auto", objectFit: "contain" }}
                   onError={(e) => { e.currentTarget.closest("div").parentElement.style.display = "none"; }} />
               </a>
               <button onClick={() => setBannerFechado(true)} title="Fechar anuncio"
