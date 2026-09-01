@@ -2,8 +2,8 @@ import {
   useParticipants,
   useTracks,
   useLocalParticipant,
-  ControlBar,
   AudioTrack,
+  VideoTrack,
   LayoutContextProvider,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
@@ -23,9 +23,14 @@ function Avatar({ participant, avatarUrl, onVolume }) {
   const [falando, setFalando] = useState(participant.isSpeaking);
   const [mutado, setMutado] = useState(!participant.isMicrophoneEnabled);
   const [transmitindo, setTransmitindo] = useState(participant.isScreenShareEnabled);
+  const [comCamera, setComCamera] = useState(participant.isCameraEnabled);
   useEffect(() => {
     const updateFala = () => setFalando(participant.isSpeaking);
-    const updateTracks = () => { setMutado(!participant.isMicrophoneEnabled); setTransmitindo(participant.isScreenShareEnabled); };
+    const updateTracks = () => {
+      setMutado(!participant.isMicrophoneEnabled);
+      setTransmitindo(participant.isScreenShareEnabled);
+      setComCamera(participant.isCameraEnabled);
+    };
     participant.on("isSpeakingChanged", updateFala);
     participant.on("trackMuted", updateTracks);
     participant.on("trackUnmuted", updateTracks);
@@ -45,6 +50,10 @@ function Avatar({ participant, avatarUrl, onVolume }) {
   const cor = corDoNome(nome);
   const ativo = falando && !mutado;
   const remoto = !participant.isLocal;
+  // pega a publicação de vídeo da câmera (pra renderizar o VideoTrack)
+  const camPub = participant.getTrackPublication
+    ? participant.getTrackPublication(Track.Source.Camera)
+    : null;
   const [volume, setVolumeState] = useState(100);
   const [mostrarVol, setMostrarVol] = useState(false);
   function mudarVolume(v) {
@@ -68,6 +77,14 @@ function Avatar({ participant, avatarUrl, onVolume }) {
         transition: "all 0.2s ease",
       }}
     >
+      {/* Webcam preenchendo o card inteiro */}
+      {comCamera && camPub && (
+        <div style={{ position: "absolute", inset: 0, borderRadius: 14, overflow: "hidden", zIndex: 0 }}>
+          <VideoTrack trackRef={{ participant, publication: camPub, source: Track.Source.Camera }}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 60, background: "linear-gradient(transparent, rgba(0,0,0,0.75))" }} />
+        </div>
+      )}
       {mutado && (
         <div style={{
           position: "absolute", top: 12, right: 12,
@@ -85,6 +102,7 @@ function Avatar({ participant, avatarUrl, onVolume }) {
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} /> AO VIVO
         </div>
       )}
+      {!(comCamera && camPub) && (
       <div style={{ position: "relative", width: 84, height: 84, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <AnimatePresence>
           {ativo && (
@@ -118,7 +136,14 @@ function Avatar({ participant, avatarUrl, onVolume }) {
           background: "#23a559", border: "3px solid #1e1f22",
         }} title="Online" />
       </div>
-      <span style={{ marginTop: 12, color: "#f2f3f5", fontWeight: 600, fontSize: 15 }}>{nome}</span>
+      )}
+      <span style={{
+        marginTop: (comCamera && camPub) ? 0 : 12,
+        color: "#f2f3f5", fontWeight: 600, fontSize: 15,
+        position: (comCamera && camPub) ? "absolute" : "static",
+        bottom: (comCamera && camPub) ? 10 : "auto", left: (comCamera && camPub) ? 12 : "auto",
+        zIndex: 3, textShadow: (comCamera && camPub) ? "0 1px 4px rgba(0,0,0,0.9)" : "none",
+      }}>{nome}</span>
       {remoto && (
         <div style={{ marginTop: 10, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
           <motion.button whileTap={{ scale: 0.9 }}
@@ -658,6 +683,62 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
     </motion.button>
   );
 
+  // Barra de controles própria (mic, câmera, transmitir, sair)
+  const BarraControles = () => {
+    const [micOn, setMicOn] = useState(localParticipant?.isMicrophoneEnabled ?? true);
+    const [camOn, setCamOn] = useState(localParticipant?.isCameraEnabled ?? false);
+    useEffect(() => {
+      if (!localParticipant) return;
+      const upd = () => {
+        setMicOn(localParticipant.isMicrophoneEnabled);
+        setCamOn(localParticipant.isCameraEnabled);
+      };
+      localParticipant.on("trackMuted", upd);
+      localParticipant.on("trackUnmuted", upd);
+      localParticipant.on("trackPublished", upd);
+      localParticipant.on("trackUnpublished", upd);
+      upd();
+      return () => {
+        localParticipant.off("trackMuted", upd);
+        localParticipant.off("trackUnmuted", upd);
+        localParticipant.off("trackPublished", upd);
+        localParticipant.off("trackUnpublished", upd);
+      };
+    }, [localParticipant]);
+
+    async function toggleMic() {
+      try { await localParticipant.setMicrophoneEnabled(!micOn); } catch (e) { alert("Erro no microfone: " + e.message); }
+    }
+    async function toggleCam() {
+      try { await localParticipant.setCameraEnabled(!camOn); } catch (e) { alert("Nao foi possivel ligar a camera: " + e.message); }
+    }
+
+    const btnBase = { border: "none", borderRadius: 12, padding: "10px 16px", cursor: "pointer", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", gap: 8, color: "#fff" };
+    return (
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
+        <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.04 }} onClick={toggleMic}
+          style={{ ...btnBase, background: micOn ? "rgba(255,255,255,0.1)" : "#f23f43" }}
+          title={micOn ? "Silenciar microfone" : "Ativar microfone"}>
+          {micOn ? "🎤" : "🔇"} <span>{micOn ? "Microfone" : "Mutado"}</span>
+        </motion.button>
+
+        <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.04 }} onClick={toggleCam}
+          style={{ ...btnBase, background: camOn ? "linear-gradient(135deg, #7c3aed, #3b82f6)" : "rgba(255,255,255,0.1)" }}
+          title={camOn ? "Desligar câmera" : "Ligar câmera"}>
+          {camOn ? "📹" : "📷"} <span>{camOn ? "Câmera on" : "Câmera"}</span>
+        </motion.button>
+
+        <BotaoTela />
+
+        <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.04 }} onClick={onSair}
+          style={{ ...btnBase, background: "rgba(242,63,67,0.15)", color: "#f77", border: "1px solid rgba(242,63,67,0.3)" }}
+          title="Sair da call">
+          🚪 <span>Sair</span>
+        </motion.button>
+      </div>
+    );
+  };
+
   // Audio invisivel: mic dos participantes + audio das transmissoes, com volume separado
   const RenderAudio = () => (
     <>
@@ -750,9 +831,8 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
           {areaCall}
 
           <RenderAudio />
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(20,21,24,0.9)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", flexWrap: "wrap" }}>
-            <ControlBar variation="minimal" controls={{ microphone: true, screenShare: false, camera: false, chat: false, leave: true }} />
-            <BotaoTela />
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(20,21,24,0.9)", flexShrink: 0, padding: "10px 12px" }}>
+            <BarraControles />
           </div>
 
           <AnimatePresence>
@@ -835,9 +915,8 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
           </div>
 
           <RenderAudio />
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(15,16,19,0.9)", flexShrink: 0, display: "flex", flexDirection: "column", gap: 8, padding: "8px 10px" }}>
-            <ControlBar variation="minimal" controls={{ microphone: true, screenShare: false, camera: false, chat: false, leave: true }} />
-            <BotaoTela />
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(15,16,19,0.9)", flexShrink: 0, padding: "12px 10px" }}>
+            <BarraControles />
           </div>
         </div>
 
