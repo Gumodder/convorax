@@ -87,6 +87,7 @@ export default function App() {
   const [criandoServidor, setCriandoServidor] = useState(false);
   const [mobile, setMobile] = useState(window.innerWidth < 768);
   const [onlinePorSala, setOnlinePorSala] = useState({});
+  const [meuUsername, setMeuUsername] = useState("");   // username do perfil (cai no email se vazio)
   const [bugAberto, setBugAberto] = useState(false);   // modal reportar bug
   const [bugTexto, setBugTexto] = useState("");
   const [bugEnviando, setBugEnviando] = useState(false);
@@ -106,6 +107,15 @@ export default function App() {
   }, []);
 
   useEffect(() => { if (sessao) carregarServidores(); }, [sessao]);
+
+  // Carrega o username do meu perfil (usado na call, chat e tela inicial)
+  useEffect(() => {
+    if (!sessao) return;
+    supabase.from("perfis").select("username").eq("id", sessao.user.id).maybeSingle()
+      .then(({ data }) => {
+        setMeuUsername(data?.username || sessao.user.email.split("@")[0]);
+      });
+  }, [sessao]);
 
   // Presenca: conta quantos estao em cada servidor, em tempo real
   useEffect(() => {
@@ -220,8 +230,13 @@ export default function App() {
     }
   }
   async function entrarNaSala(servidor) {
-    const nome = sessao.user.email.split("@")[0];
-    const res = await fetch(`https://api.convorax.space/token?room=${servidor.id}&name=${nome}`);
+    // usa o username do perfil; se ainda nao carregou, busca na hora; por fim cai no email
+    let nome = meuUsername;
+    if (!nome) {
+      const { data } = await supabase.from("perfis").select("username").eq("id", sessao.user.id).maybeSingle();
+      nome = data?.username || sessao.user.email.split("@")[0];
+    }
+    const res = await fetch(`https://api.convorax.space/token?room=${servidor.id}&name=${encodeURIComponent(nome)}`);
     const data = await res.json();
     setToken(data.token);
     setSalaAtual(servidor);
@@ -272,7 +287,7 @@ export default function App() {
         <header style={{ ...s.header, flexDirection: "row", gap: 12, alignItems: "center" }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <h1 style={{ ...s.h1, fontSize: mobile ? 24 : 28 }}>Servidores</h1>
-            <p style={{ ...s.email, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sessao.user.email}</p>
+            <p style={{ ...s.email, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{meuUsername || sessao.user.email}</p>
           </div>
           <motion.button whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.05 }}
             onClick={() => setBugAberto(true)}
