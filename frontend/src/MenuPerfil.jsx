@@ -45,7 +45,12 @@ export default function MenuPerfil({ sessao }) {
     setEnviando(true);
     setMsg("");
     try {
-      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      // Extensão vem do TIPO real do arquivo, não do nome (senão um GIF salvo como .jpg vira estático)
+      const tipoExt = {
+        "image/gif": "gif", "image/png": "png", "image/jpeg": "jpg",
+        "image/webp": "webp", "image/avif": "avif",
+      };
+      const ext = tipoExt[file.type] || (file.name.split(".").pop() || "png").toLowerCase();
       const caminho = `${sessao.user.id}/avatar.${ext}`;
       const { error: upErr } = await supabase.storage
         .from("avatares").upload(caminho, file, { upsert: true, contentType: file.type });

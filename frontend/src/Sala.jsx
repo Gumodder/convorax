@@ -447,6 +447,84 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
   );
 }
 
+// ---- Modal de edição do servidor (só dono) ----
+function EditarServidor({ salaId, nomeInicial, avatarInicial, onFechar, onSalvo }) {
+  const [nome, setNome] = useState(nomeInicial || "");
+  const [avatar, setAvatar] = useState(avatarInicial || "");
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const fileRef = useRef(null);
+
+  async function trocarFoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEnviando(true); setMsg("");
+    try {
+      const tipoExt = { "image/gif": "gif", "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/avif": "avif" };
+      const ext = tipoExt[file.type] || "png";
+      const caminho = `servidores/${salaId}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("avatares").upload(caminho, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from("avatares").getPublicUrl(caminho);
+      setAvatar(data.publicUrl + "?t=" + Date.now());
+    } catch (err) {
+      setMsg("Erro na foto: " + err.message);
+    } finally {
+      setEnviando(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function salvar() {
+    setEnviando(true); setMsg("");
+    const { data, error } = await supabase.rpc("editar_servidor", {
+      p_id: salaId, p_nome: nome.trim(), p_avatar_url: avatar || null,
+    });
+    setEnviando(false);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    if (data) { onSalvo({ nome: data.nome, avatar_url: data.avatar_url }); onFechar(); }
+  }
+
+  return (
+    <div onClick={onFechar}
+      style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <motion.div onClick={(e) => e.stopPropagation()}
+        initial={{ scale: 0.94, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        style={{ width: "100%", maxWidth: 380, background: "#141518", borderRadius: 16, border: "1px solid rgba(124,58,237,0.25)", overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,0.6)" }}>
+        <div style={{ height: 64, background: "linear-gradient(135deg, #7c3aed, #3b82f6)", display: "flex", alignItems: "center", padding: "0 18px" }}>
+          <span style={{ fontWeight: 800, color: "#fff", fontSize: 16 }}>Editar servidor</span>
+          <button onClick={onFechar} style={{ marginLeft: "auto", background: "rgba(0,0,0,0.25)", border: "none", color: "#fff", fontSize: 16, width: 32, height: 32, borderRadius: "50%", cursor: "pointer" }}>✕</button>
+        </div>
+        <div style={{ padding: 18 }}>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+            <div onClick={() => fileRef.current?.click()}
+              style={{ width: 88, height: 88, borderRadius: "50%", background: avatar ? "#000" : "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "3px solid #2b2d31", overflow: "hidden", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}
+              title="Trocar foto">
+              {avatar
+                ? <img src={avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <span style={{ color: "#fff", fontSize: 30, fontWeight: 800 }}>{(nome || "?").charAt(0).toUpperCase()}</span>}
+              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 10, textAlign: "center", padding: "2px 0" }}>editar</div>
+            </div>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*,image/gif" onChange={trocarFoto} style={{ display: "none" }} />
+
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#8b8f96", letterSpacing: 0.5, marginBottom: 8 }}>NOME DO SERVIDOR</div>
+          <input value={nome} onChange={(e) => setNome(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && salvar()}
+            style={{ width: "100%", padding: 11, borderRadius: 8, border: "1px solid #2b2d31", background: "#1a1b1e", color: "#f2f3f5", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 14 }} />
+
+          <motion.button whileTap={{ scale: 0.96 }} onClick={salvar} disabled={enviando}
+            style={{ width: "100%", padding: 12, borderRadius: 8, border: "none", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", color: "#fff", fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(124,58,237,0.35)" }}>
+            {enviando ? "..." : "Salvar"}
+          </motion.button>
+          {msg && <p style={{ fontSize: 12, color: "#f0b232", marginTop: 10, textAlign: "center" }}>{msg}</p>}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 export default function Sala({ salaId, nomeServidor, onSair }) {
   const participants = useParticipants();
   const screenShares = useTracks([Track.Source.ScreenShare]);
@@ -462,6 +540,9 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
   const [canalAtual, setCanalAtual] = useState(null); // id do canal selecionado
   const [criandoCanal, setCriandoCanal] = useState(false);
   const [souDono, setSouDono] = useState(false); // sou dono deste servidor?
+  const [srvNome, setSrvNome] = useState(nomeServidor || ""); // nome atual (editável)
+  const [srvAvatar, setSrvAvatar] = useState(""); // foto do servidor
+  const [editarAberto, setEditarAberto] = useState(false); // modal de edição
   const videoRef = useRef(null);
   const { localParticipant } = useLocalParticipant();
   const micTracks = useTracks([Track.Source.Microphone]);
@@ -519,17 +600,19 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
     return () => { ativo = false; supabase.removeChannel(ch); };
   }, [salaId]);
 
-  // Descobre se sou o dono deste servidor
+  // Descobre se sou o dono e carrega dados do servidor (nome, foto)
   useEffect(() => {
     if (!salaId) return;
     let ativo = true;
     (async () => {
       const { data: u } = await supabase.auth.getUser();
       const meuId = u?.user?.id;
-      if (!meuId) return;
       const { data } = await supabase
-        .from("servidores").select("dono_id").eq("id", salaId).single();
-      if (ativo && data) setSouDono(data.dono_id === meuId);
+        .from("servidores").select("nome, avatar_url, dono_id").eq("id", salaId).single();
+      if (!ativo || !data) return;
+      setSrvNome(data.nome || "");
+      setSrvAvatar(data.avatar_url || "");
+      if (meuId) setSouDono(data.dono_id === meuId);
     })();
     return () => { ativo = false; };
   }, [salaId]);
@@ -646,7 +729,14 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
       <LayoutContextProvider>
         <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0d0e11" }}>
           <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <span style={{ fontWeight: 800, color: "#f2f3f5", fontSize: 16 }}>{nomeServidor}</span>
+            <div onClick={() => souDono && setEditarAberto(true)}
+              style={{ display: "flex", alignItems: "center", gap: 8, cursor: souDono ? "pointer" : "default" }}>
+              {srvAvatar && (
+                <img src={srvAvatar} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+              )}
+              <span style={{ fontWeight: 800, color: "#f2f3f5", fontSize: 16 }}>{srvNome}</span>
+              {souDono && <span style={{ color: "#8b8f96", fontSize: 11 }}>✏️</span>}
+            </div>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#b5bac1", fontSize: 13, marginLeft: 6 }}>
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#23a559", display: "inline-block", boxShadow: "0 0 8px #23a559" }} />
               {participants.length}
@@ -677,6 +767,11 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
             )}
           </AnimatePresence>
 
+          {editarAberto && (
+            <EditarServidor salaId={salaId} nomeInicial={srvNome} avatarInicial={srvAvatar}
+              onFechar={() => setEditarAberto(false)}
+              onSalvo={({ nome, avatar_url }) => { setSrvNome(nome); setSrvAvatar(avatar_url || ""); }} />
+          )}
           <Lightbox imagem={imagemAberta} fechar={() => setImagemAberta(null)} />
         </div>
       </LayoutContextProvider>
@@ -693,7 +788,15 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
             <motion.button whileTap={{ scale: 0.85 }} onClick={onSair}
               style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#f2f3f5", fontSize: 18, width: 34, height: 34, borderRadius: 8, cursor: "pointer", flexShrink: 0 }}
               title="Sair do servidor">←</motion.button>
-            <span style={{ fontWeight: 800, color: "#f2f3f5", fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nomeServidor}</span>
+            <div onClick={() => souDono && setEditarAberto(true)}
+              style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1, cursor: souDono ? "pointer" : "default" }}
+              title={souDono ? "Editar servidor" : ""}>
+              {srvAvatar && (
+                <img src={srvAvatar} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+              )}
+              <span style={{ fontWeight: 800, color: "#f2f3f5", fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{srvNome}</span>
+              {souDono && <span style={{ color: "#8b8f96", fontSize: 12, flexShrink: 0 }}>✏️</span>}
+            </div>
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 10px" }}>
@@ -767,6 +870,11 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
             title="Abrir chat">💬 Chat</motion.button>
         )}
 
+        {editarAberto && (
+          <EditarServidor salaId={salaId} nomeInicial={srvNome} avatarInicial={srvAvatar}
+            onFechar={() => setEditarAberto(false)}
+            onSalvo={({ nome, avatar_url }) => { setSrvNome(nome); setSrvAvatar(avatar_url || ""); }} />
+        )}
         <Lightbox imagem={imagemAberta} fechar={() => setImagemAberta(null)} />
       </div>
     </LayoutContextProvider>
