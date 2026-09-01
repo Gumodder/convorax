@@ -231,14 +231,20 @@ export default function App() {
     }
   }
   async function entrarNaSala(servidor) {
-    // usa o username do perfil; se ainda nao carregou, busca na hora; por fim cai no email
-    let nome = meuUsername;
-    if (!nome) {
-      const { data } = await supabase.from("perfis").select("username").eq("id", sessao.user.id).maybeSingle();
-      nome = data?.username || sessao.user.email.split("@")[0];
+    // manda o JWT de login; o backend valida e so libera se for membro
+    const jwt = sessao?.access_token;
+    const res = await fetch(`https://api.convorax.space/token?room=${servidor.id}`, {
+      headers: { Authorization: `Bearer ${jwt}` },
+    });
+    if (!res.ok) {
+      setAviso("Nao foi possivel entrar na call. Voce precisa ser membro do servidor.");
+      return;
     }
-    const res = await fetch(`https://api.convorax.space/token?room=${servidor.id}&name=${encodeURIComponent(nome)}`);
     const data = await res.json();
+    if (!data.token) {
+      setAviso("Nao foi possivel entrar na call.");
+      return;
+    }
     setToken(data.token);
     setSalaAtual(servidor);
     window.history.replaceState(null, "", "?sala=" + servidor.id);
