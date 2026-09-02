@@ -11,6 +11,9 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
 
+// som de notificação de mensagem nova (arquivo no bucket público 'assets')
+const SOM_MENSAGEM = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/som-mensagem.mp3";
+
 const CORES = ["#a855f7", "#3b82f6", "#06b6d4", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#14b8a6", "#f97316"];
 function corDoNome(nome) {
   let h = 0;
@@ -261,7 +264,12 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
       .channel("canal-" + canalId)
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "mensagens", filter: "canal_id=eq." + canalId },
-        (payload) => setMensagens((m) => [...m, payload.new])
+        (payload) => {
+          if (payload.new.autor !== meuNome) {
+            try { const a = new Audio(SOM_MENSAGEM); a.volume = 0.5; a.play(); } catch (e) {}
+          }
+          setMensagens((m) => [...m, payload.new]);
+        }
       )
       .on("postgres_changes",
         { event: "DELETE", schema: "public", table: "mensagens" },
