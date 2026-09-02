@@ -21,8 +21,15 @@ function SomAoEntrar() {
     const audio = new Audio(SOM_ENTRADA);
     audio.volume = 0.5;
     const tocar = () => { try { audio.currentTime = 0; audio.play(); } catch (e) {} };
+    // toca quando OUTRA pessoa entra
     room.on(RoomEvent.ParticipantConnected, tocar);
-    return () => room.off(RoomEvent.ParticipantConnected, tocar);
+    // toca quando EU entro (conexão estabelecida) ou já estou conectado
+    room.on(RoomEvent.Connected, tocar);
+    if (room.state === "connected") tocar();
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, tocar);
+      room.off(RoomEvent.Connected, tocar);
+    };
   }, [room]);
   return null;
 }
