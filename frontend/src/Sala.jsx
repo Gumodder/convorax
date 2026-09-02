@@ -181,7 +181,7 @@ function Avatar({ participant, avatarUrl, onVolume }) {
             {mostrarVol && (
               <motion.input
                 initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                type="range" min="0" max="100" value={volume}
+                type="range" min="0" max="200" value={volume}
                 onChange={(e) => mudarVolume(Number(e.target.value))}
                 style={{ width: "90%", accentColor: "#7c3aed", cursor: "pointer" }} />
             )}
@@ -824,11 +824,11 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
     <>
       {micTracks.filter((t) => !t.participant.isLocal).map((t) => (
         <AudioTrack key={"mic-" + t.publication.trackSid} trackRef={t}
-          volume={Math.min(1, (micVol[t.participant.identity] ?? 100) / 100)} />
+          volume={Math.min(2, (micVol[t.participant.identity] ?? 100) / 100)} />
       ))}
       {telaAudioTracks.filter((t) => !t.participant.isLocal).map((t) => (
         <AudioTrack key={"tela-" + t.publication.trackSid} trackRef={t}
-          volume={telaMute[t.participant.identity] ? 0 : Math.min(1, (telaVol[t.participant.identity] ?? 100) / 100)} />
+          volume={telaMute[t.participant.identity] ? 0 : Math.min(2, (telaVol[t.participant.identity] ?? 100) / 100)} />
       ))}
     </>
   );
@@ -867,7 +867,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
                       <button onClick={() => setTelaMute((m) => ({ ...m, [dono]: !m[dono] }))}
                         style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer", fontSize: 15 }}
                         title={mutado ? "Ativar som" : "Silenciar som"}>{mutado ? "🔇" : "🔊"}</button>
-                      <input type="range" min="0" max="100" value={mutado ? 0 : vol}
+                      <input type="range" min="0" max="200" value={mutado ? 0 : vol}
                         onChange={(e) => { const v = Number(e.target.value); setTelaVol((s) => ({ ...s, [dono]: v })); setTelaMute((m) => ({ ...m, [dono]: false })); }}
                         style={{ width: 90, accentColor: "#7c3aed", cursor: "pointer" }} />
                     </div>

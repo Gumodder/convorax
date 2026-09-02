@@ -311,6 +311,7 @@ export default function App() {
         connect={true}
         video={false}
         audio={true}
+        options={{ webAudioMix: true }}
         audioCaptureDefaults={{ noiseSuppression: true, echoCancellation: true, autoGainControl: true }}
         onDisconnected={sairDaSala}
         style={{ height: "100vh" }}
