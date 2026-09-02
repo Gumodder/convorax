@@ -120,6 +120,7 @@ export default function App() {
   const [onlinePorSala, setOnlinePorSala] = useState({});
   const [meuUsername, setMeuUsername] = useState("");   // username do perfil (cai no email se vazio)
   const [bannerFechado, setBannerFechado] = useState(false); // banner de anuncio no rodape
+  const [perfilAberto, setPerfilAberto] = useState(false); // menu de perfil aberto (esconde o banner)
   const [bugAberto, setBugAberto] = useState(false);   // modal reportar bug
   const [bugTexto, setBugTexto] = useState("");
   const [bugEnviando, setBugEnviando] = useState(false);
@@ -349,7 +350,7 @@ export default function App() {
             style={s.btnBug} title="Reportar um bug">
             🐛 {!mobile && "Reportar bug"}
           </motion.button>
-          <MenuPerfil sessao={sessao} />
+          <MenuPerfil sessao={sessao} onAbertoChange={setPerfilAberto} />
         </header>
 
         <div style={{ ...s.acoes, flexDirection: mobile ? "column" : "row" }}>
@@ -466,7 +467,7 @@ export default function App() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {!bannerFechado && (
+        {!bannerFechado && !perfilAberto && (
           <motion.div
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}

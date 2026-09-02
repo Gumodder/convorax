@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
 
-export default function MenuPerfil({ sessao }) {
+export default function MenuPerfil({ sessao, onAbertoChange }) {
   const [aberto, setAberto] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [username, setUsername] = useState("");
@@ -23,6 +23,8 @@ export default function MenuPerfil({ sessao }) {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => { if (onAbertoChange) onAbertoChange(aberto); }, [aberto]);
 
   useEffect(() => {
     supabase.from("perfis").select("avatar_url, username").eq("id", sessao.user.id).single()
