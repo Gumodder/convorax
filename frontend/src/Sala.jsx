@@ -238,7 +238,7 @@ function ParticipanteMini({ participant, avatarUrl }) {
 }
 
 // ---- Chat ----
-function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais = [], canalAtual, onTrocarCanal, onCriarCanal, criandoCanal, souDono }) {
+function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais = [], canalAtual, onTrocarCanal, onCriarCanal, onApagarCanal, criandoCanal, souDono }) {
   const nomeCanal = canais.find((c) => c.id === canalId)?.nome || "chat";
   const [mensagens, setMensagens] = useState([]);
   const [texto, setTexto] = useState("");
@@ -410,12 +410,19 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
           {canais.map((c) => {
             const sel = c.id === canalAtual;
             return (
-              <button key={c.id} onClick={() => onTrocarCanal && onTrocarCanal(c.id)}
-                style={{ flexShrink: 0, border: "none", cursor: "pointer", borderRadius: 20, padding: "6px 14px", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap",
-                  background: sel ? "linear-gradient(135deg, #7c3aed, #3b82f6)" : "#383a40",
-                  color: sel ? "#fff" : "#b5bac1" }}>
-                # {c.nome}
-              </button>
+              <div key={c.id} style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                <button onClick={() => onTrocarCanal && onTrocarCanal(c.id)}
+                  style={{ flexShrink: 0, border: "none", cursor: "pointer", borderRadius: 20, padding: "6px 14px", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap",
+                    background: sel ? "linear-gradient(135deg, #7c3aed, #3b82f6)" : "#383a40",
+                    color: sel ? "#fff" : "#b5bac1" }}>
+                  # {c.nome}
+                </button>
+                {souDono && canais.length > 1 && (
+                  <button onClick={() => onApagarCanal && onApagarCanal(c.id, c.nome)}
+                    style={{ flexShrink: 0, border: "none", background: "transparent", color: "#8b8f96", cursor: "pointer", fontSize: 13, padding: "0 4px" }}
+                    title="Apagar canal">🗑</button>
+                )}
+              </div>
             );
           })}
           <button onClick={() => onCriarCanal && onCriarCanal()} disabled={criandoCanal}
@@ -690,6 +697,10 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
         { event: "INSERT", schema: "public", table: "canais", filter: "servidor_id=eq." + salaId },
         (payload) => setCanais((cs) => cs.some((c) => c.id === payload.new.id) ? cs : [...cs, payload.new])
       )
+      .on("postgres_changes",
+        { event: "DELETE", schema: "public", table: "canais" },
+        (payload) => setCanais((cs) => cs.filter((c) => c.id !== payload.old?.id))
+      )
       .subscribe();
     return () => { ativo = false; supabase.removeChannel(ch); };
   }, [salaId]);
@@ -725,6 +736,23 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
       setCanalAtual(data.id);
     }
   }
+
+  async function apagarCanal(canalId, nomeCanal) {
+    if (canais.length <= 1) { alert("Não dá pra apagar o único canal do servidor."); return; }
+    if (!window.confirm(`Apagar o canal "${nomeCanal}"? As mensagens dele somem. Não dá pra desfazer.`)) return;
+    const { error } = await supabase.rpc("apagar_canal", { p_canal_id: canalId });
+    if (error) { alert("Erro ao apagar canal: " + error.message); return; }
+    const restantes = canais.filter((c) => c.id !== canalId);
+    setCanais(restantes);
+    if (canalAtual === canalId) setCanalAtual(restantes[0]?.id ?? null);
+  }
+
+  // garante que sempre há um canal válido selecionado (ex: apagaram o atual)
+  useEffect(() => {
+    if (canais.length && (!canalAtual || !canais.some((c) => c.id === canalAtual))) {
+      setCanalAtual(canais[0].id);
+    }
+  }, [canais]);
 
   const eu = participants.find((p) => p.isLocal);
   const meuNome = eu?.identity || "convidado";
@@ -928,7 +956,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
                 transition={{ type: "tween", duration: 0.22, ease: "easeInOut" }}
                 style={{ position: "fixed", inset: 0, height: "100dvh", zIndex: 50, background: "#2b2d31", display: "flex", flexDirection: "column" }}>
                 <Chat canalId={canalAtual} meuNome={meuNome} mobile={true} onFechar={() => setChatAberto(false)} onImagem={setImagemAberta}
-                  canais={canais} canalAtual={canalAtual} onTrocarCanal={setCanalAtual} onCriarCanal={criarCanal} criandoCanal={criandoCanal} souDono={souDono} />
+                  canais={canais} canalAtual={canalAtual} onTrocarCanal={setCanalAtual} onCriarCanal={criarCanal} onApagarCanal={apagarCanal} criandoCanal={criandoCanal} souDono={souDono} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -977,13 +1005,21 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
               {canais.map((c) => {
                 const sel = c.id === canalAtual;
                 return (
-                  <motion.button key={c.id} whileTap={{ scale: 0.97 }}
-                    onClick={() => { setCanalAtual(c.id); setChatRecolhido(false); setChatAberto(true); }}
-                    style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600,
-                      background: sel ? "linear-gradient(135deg, rgba(124,58,237,0.25), rgba(59,130,246,0.25))" : "transparent",
-                      color: sel ? "#f2f3f5" : "#b5bac1" }}>
-                    <span style={{ color: "#8b8f96", fontWeight: 700 }}>#</span> {c.nome}
-                  </motion.button>
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    <motion.button whileTap={{ scale: 0.97 }}
+                      onClick={() => { setCanalAtual(c.id); setChatRecolhido(false); setChatAberto(true); }}
+                      style={{ flex: 1, minWidth: 0, textAlign: "left", display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600,
+                        background: sel ? "linear-gradient(135deg, rgba(124,58,237,0.25), rgba(59,130,246,0.25))" : "transparent",
+                        color: sel ? "#f2f3f5" : "#b5bac1" }}>
+                      <span style={{ color: "#8b8f96", fontWeight: 700 }}>#</span> {c.nome}
+                    </motion.button>
+                    {souDono && canais.length > 1 && (
+                      <motion.button whileTap={{ scale: 0.85 }} whileHover={{ scale: 1.15 }}
+                        onClick={() => apagarCanal(c.id, c.nome)}
+                        style={{ flexShrink: 0, background: "transparent", border: "none", color: "#8b8f96", cursor: "pointer", fontSize: 13, padding: "4px 6px", borderRadius: 6 }}
+                        title="Apagar canal">🗑</motion.button>
+                    )}
+                  </div>
                 );
               })}
             </div>
