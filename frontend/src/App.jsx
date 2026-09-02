@@ -3,11 +3,29 @@ import { supabase } from "./supabase";
 import Login from "./Login";
 import Sala from "./Sala";
 import MenuPerfil from "./MenuPerfil";
-import { LiveKitRoom } from "@livekit/components-react";
+import { LiveKitRoom, useRoomContext } from "@livekit/components-react";
 import "@livekit/components-styles";
+import { RoomEvent } from "livekit-client";
 import { motion, AnimatePresence } from "framer-motion";
 
 const LIVEKIT_URL = "wss://voz.convorax.space";
+
+// URL do som tocado quando alguém entra na call (arquivo no bucket público 'assets')
+const SOM_ENTRADA = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/som-entrada.mp3";
+
+// Toca um som toda vez que OUTRO participante entra na sala de voz
+function SomAoEntrar() {
+  const room = useRoomContext();
+  useEffect(() => {
+    if (!room) return;
+    const audio = new Audio(SOM_ENTRADA);
+    audio.volume = 0.5;
+    const tocar = () => { try { audio.currentTime = 0; audio.play(); } catch (e) {} };
+    room.on(RoomEvent.ParticipantConnected, tocar);
+    return () => room.off(RoomEvent.ParticipantConnected, tocar);
+  }, [room]);
+  return null;
+}
 
 // ---- Modal: foto opcional ao criar servidor ----
 function FotoNovoServidor({ nome, onCriar, onFechar, criando }) {
@@ -284,6 +302,7 @@ export default function App() {
         style={{ height: "100vh" }}
       >
         <Sala salaId={salaAtual.id} nomeServidor={salaAtual.nome} onSair={sairDaSala} />
+        <SomAoEntrar />
       </LiveKitRoom>
     );
   }
