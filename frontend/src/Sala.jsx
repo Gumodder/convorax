@@ -32,7 +32,7 @@ function horaMsg(ts) {
 }
 
 // ---- Avatar grande (grid central) ----
-function Avatar({ participant, avatarUrl, onVolume }) {
+function Avatar({ participant, avatarUrl, onVolume, mudoLocal, onToggleMudo }) {
   const [falando, setFalando] = useState(participant.isSpeaking);
   const [mutado, setMutado] = useState(!participant.isMicrophoneEnabled);
   const [transmitindo, setTransmitindo] = useState(participant.isScreenShareEnabled);
@@ -171,12 +171,20 @@ function Avatar({ participant, avatarUrl, onVolume }) {
       }}>{nome}</span>
       {remoto && (
         <div style={{ marginTop: 10, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-          <motion.button whileTap={{ scale: 0.9 }}
-            onClick={() => setMostrarVol((v) => !v)}
-            style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#b5bac1", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}
-            title="Volume desta pessoa (ou botão direito no card)">
-            {volume === 0 ? "🔇" : "🔊"} {volume}%
-          </motion.button>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <motion.button whileTap={{ scale: 0.9 }}
+              onClick={onToggleMudo}
+              style={{ background: mudoLocal ? "rgba(242,63,67,0.25)" : "rgba(255,255,255,0.06)", border: mudoLocal ? "1px solid rgba(242,63,67,0.5)" : "1px solid transparent", color: mudoLocal ? "#ff6b6e" : "#b5bac1", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}
+              title={mudoLocal ? "Ativar som desta pessoa (só pra você)" : "Silenciar esta pessoa (só pra você)"}>
+              {mudoLocal ? "🔇 Mutado" : "🔊 Mutar"}
+            </motion.button>
+            <motion.button whileTap={{ scale: 0.9 }}
+              onClick={() => setMostrarVol((v) => !v)}
+              style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#b5bac1", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}
+              title="Volume desta pessoa (ou botão direito no card)">
+              🎚 {volume}%
+            </motion.button>
+          </div>
           <AnimatePresence>
             {mostrarVol && (
               <motion.input
@@ -642,6 +650,12 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
 
   function ajustarMic(identity, v) { setMicVol((m) => ({ ...m, [identity]: v })); }
 
+  // mute local: só EU paro de ouvir a pessoa (os outros continuam ouvindo)
+  const [mudoLocal, setMudoLocal] = useState({}); // identity -> bool
+  function alternarMudoLocal(identity) {
+    setMudoLocal((m) => ({ ...m, [identity]: !m[identity] }));
+  }
+
   // toca um som quando uma NOVA transmissão de tela começa (não toca ao entrar numa call que já tem)
   const contagemTelasAnterior = useRef(null);
   useEffect(() => {
@@ -852,7 +866,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
     <>
       {micTracks.filter((t) => !t.participant.isLocal).map((t) => (
         <AudioTrack key={"mic-" + t.publication.trackSid} trackRef={t}
-          volume={Math.min(2, (micVol[t.participant.identity] ?? 100) / 100)} />
+          volume={mudoLocal[t.participant.identity] ? 0 : Math.min(2, (micVol[t.participant.identity] ?? 100) / 100)} />
       ))}
       {telaAudioTracks.filter((t) => !t.participant.isLocal).map((t) => (
         <AudioTrack key={"tela-" + t.publication.trackSid} trackRef={t}
@@ -912,7 +926,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
         <AnimatePresence>
-          {participants.map((p) => <Avatar key={p.sid} participant={p} avatarUrl={perfis[p.identity]} onVolume={ajustarMic} />)}
+          {participants.map((p) => <Avatar key={p.sid} participant={p} avatarUrl={perfis[p.identity]} onVolume={ajustarMic} mudoLocal={!!mudoLocal[p.identity]} onToggleMudo={() => alternarMudoLocal(p.identity)} />)}
         </AnimatePresence>
       </div>
     </div>
