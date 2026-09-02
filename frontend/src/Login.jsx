@@ -5,6 +5,7 @@ export default function Login() {
   const [senha, setSenha] = useState("");
   const [modo, setModo] = useState("entrar");
   const [erro, setErro] = useState("");
+  const [sucesso, setSucesso] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [mobile, setMobile] = useState(window.innerWidth < 640);
@@ -16,15 +17,31 @@ export default function Login() {
   }, []);
   async function handle() {
     setErro("");
+    setSucesso("");
     setCarregando(true);
     try {
       if (modo === "entrar") {
         const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
-        if (error) setErro("Email ou senha incorretos");
+        if (error) {
+          const msg = (error.message || "").toLowerCase();
+          if (msg.includes("not confirmed") || msg.includes("confirm")) {
+            setErro("Confirme seu email antes de entrar. Veja sua caixa de entrada (e o spam).");
+          } else {
+            setErro("Email ou senha incorretos");
+          }
+        }
       } else {
-        const { error } = await supabase.auth.signUp({ email, password: senha });
-        if (error) setErro(error.message);
-        else setErro("Conta criada! Agora entre.");
+        const { data, error } = await supabase.auth.signUp({ email, password: senha });
+        if (error) {
+          setErro(error.message);
+        } else if (data?.user && !data.session) {
+          // signup exigindo confirmacao de email (sem sessao imediata)
+          setSucesso("Enviamos um link de confirmacao pro seu email. Confirma pra entrar!");
+          setModo("entrar");
+        } else {
+          setSucesso("Conta criada! Ja pode entrar.");
+          setModo("entrar");
+        }
       }
     } catch (e) {
       setErro("Falha ao conectar: " + (e?.message || "tente de novo"));
@@ -59,9 +76,10 @@ export default function Login() {
           {carregando ? "..." : modo === "entrar" ? "Entrar" : "Continuar"}
         </button>
         {erro && <p style={estilos.erro}>{erro}</p>}
+        {sucesso && <p style={estilos.sucesso}>{sucesso}</p>}
         <p style={estilos.troca}>
           {modo === "entrar" ? "Precisa de uma conta? " : "Já tem conta? "}
-          <span style={estilos.link} onClick={() => { setModo(modo === "entrar" ? "cadastrar" : "entrar"); setErro(""); }}>
+          <span style={estilos.link} onClick={() => { setModo(modo === "entrar" ? "cadastrar" : "entrar"); setErro(""); setSucesso(""); }}>
             {modo === "entrar" ? "Cadastre-se" : "Entrar"}
           </span>
         </p>
@@ -81,6 +99,7 @@ const estilos = {
   olho: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", fontSize: 18, padding: 4, lineHeight: 1 },
   botao: { width: "100%", padding: 13, marginTop: 24, borderRadius: 8, border: "none", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 16px rgba(124,58,237,0.4)" },
   erro: { color: "#f0b232", fontSize: 13, marginTop: 12, textAlign: "center" },
+  sucesso: { color: "#23a559", fontSize: 13, marginTop: 12, textAlign: "center", fontWeight: 600 },
   troca: { fontSize: 14, color: "#b5bac1", marginTop: 20, textAlign: "center" },
   link: { color: "#8b5cf6", cursor: "pointer", fontWeight: 600 },
 };
