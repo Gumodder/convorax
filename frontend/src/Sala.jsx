@@ -13,6 +13,8 @@ import { supabase } from "./supabase";
 
 // som de notificação de mensagem nova (arquivo no bucket público 'assets')
 const SOM_MENSAGEM = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/som-mensagem.mp3";
+// som tocado quando alguém inicia uma transmissão de tela
+const SOM_TRANSMISSAO = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/som-transmissao.mp3";
 
 const CORES = ["#a855f7", "#3b82f6", "#06b6d4", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#14b8a6", "#f97316"];
 function corDoNome(nome) {
@@ -632,6 +634,15 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
 
   function ajustarMic(identity, v) { setMicVol((m) => ({ ...m, [identity]: v })); }
 
+  // toca um som quando uma NOVA transmissão de tela começa (não toca ao entrar numa call que já tem)
+  const contagemTelasAnterior = useRef(null);
+  useEffect(() => {
+    if (contagemTelasAnterior.current !== null && screenShares.length > contagemTelasAnterior.current) {
+      try { const a = new Audio(SOM_TRANSMISSAO); a.volume = 0.5; a.play(); } catch (e) {}
+    }
+    contagemTelasAnterior.current = screenShares.length;
+  }, [screenShares.length]);
+
   useEffect(() => {
     const onResize = () => setMobile(window.innerWidth < 900);
     window.addEventListener("resize", onResize);
@@ -836,8 +847,14 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
             const vol = telaVol[dono] ?? 100;
             return (
               <div key={track.publication.trackSid} data-tela style={{ position: "relative", background: "#000", borderRadius: 12, overflow: "hidden" }}>
-                <div style={{ position: "absolute", top: 10, left: 12, zIndex: 2, background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 20 }}>
-                  🖥 {dono}
+                <div style={{ position: "absolute", top: 10, left: 12, zIndex: 2, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 20 }}>
+                    🖥 {dono}
+                  </span>
+                  <span style={{ background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 20, display: "inline-flex", alignItems: "center", gap: 4 }}
+                    title="Pessoas vendo a transmissão">
+                    👁 {Math.max(0, participants.length - 1)}
+                  </span>
                 </div>
                 <video
                   ref={(el) => { if (el) { track.publication.track?.attach(el); videoRef.current = el; } }}
