@@ -96,13 +96,13 @@ export default function MenuPerfil({ sessao }) {
 
   const painelMobile = {
     position: "fixed", top: 0, left: 0, right: 0, bottom: 0, width: "100%", height: "100%",
-    background: "#0d0e11", zIndex: 200, overflowY: "auto",
+    background: "#0d0e11", zIndex: 400, overflowY: "auto",
   };
   const painelDesktop = {
     position: "absolute", top: 54, right: 0, width: 306,
     background: "rgba(20,21,24,0.98)", backdropFilter: "blur(10px)",
     border: "1px solid rgba(124,58,237,0.25)", borderRadius: 16, overflow: "hidden",
-    boxShadow: "0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(59,130,246,0.06)", zIndex: 100,
+    boxShadow: "0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(59,130,246,0.06)", zIndex: 400,
   };
 
   return (
