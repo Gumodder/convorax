@@ -110,12 +110,26 @@ export default function App() {
   useEffect(() => { if (sessao) carregarServidores(); }, [sessao]);
 
   // Carrega o username do meu perfil (usado na call, chat e tela inicial)
+  // + checa se a conta foi banida: desloga na hora e revalida a cada 30s
   useEffect(() => {
     if (!sessao) return;
-    supabase.from("perfis").select("username").eq("id", sessao.user.id).maybeSingle()
-      .then(({ data }) => {
-        setMeuUsername(data?.username || sessao.user.email.split("@")[0]);
-      });
+    let ativo = true;
+
+    async function checarPerfil() {
+      const { data } = await supabase
+        .from("perfis").select("username, banido").eq("id", sessao.user.id).maybeSingle();
+      if (!ativo) return;
+      if (data?.banido) {
+        alert("Sua conta foi banida.");
+        await supabase.auth.signOut();
+        return;
+      }
+      setMeuUsername(data?.username || sessao.user.email.split("@")[0]);
+    }
+
+    checarPerfil();
+    const intervalo = setInterval(checarPerfil, 30000);
+    return () => { ativo = false; clearInterval(intervalo); };
   }, [sessao]);
 
   // Presenca: conta quantos estao em cada servidor, em tempo real
