@@ -76,6 +76,7 @@ function Avatar({ participant, avatarUrl, onVolume }) {
   return (
     <motion.div
       layout
+      onContextMenu={remoto ? (e) => { e.preventDefault(); setMostrarVol((v) => !v); } : undefined}
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.8 }}
@@ -173,14 +174,14 @@ function Avatar({ participant, avatarUrl, onVolume }) {
           <motion.button whileTap={{ scale: 0.9 }}
             onClick={() => setMostrarVol((v) => !v)}
             style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#b5bac1", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}
-            title="Volume desta pessoa">
+            title="Volume desta pessoa (ou botão direito no card)">
             {volume === 0 ? "🔇" : "🔊"} {volume}%
           </motion.button>
           <AnimatePresence>
             {mostrarVol && (
               <motion.input
                 initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                type="range" min="0" max="200" value={volume}
+                type="range" min="0" max="500" value={volume}
                 onChange={(e) => mudarVolume(Number(e.target.value))}
                 style={{ width: "90%", accentColor: "#7c3aed", cursor: "pointer" }} />
             )}
@@ -866,7 +867,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
                       <button onClick={() => setTelaMute((m) => ({ ...m, [dono]: !m[dono] }))}
                         style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer", fontSize: 15 }}
                         title={mutado ? "Ativar som" : "Silenciar som"}>{mutado ? "🔇" : "🔊"}</button>
-                      <input type="range" min="0" max="200" value={mutado ? 0 : vol}
+                      <input type="range" min="0" max="500" value={mutado ? 0 : vol}
                         onChange={(e) => { const v = Number(e.target.value); setTelaVol((s) => ({ ...s, [dono]: v })); setTelaMute((m) => ({ ...m, [dono]: false })); }}
                         style={{ width: 90, accentColor: "#7c3aed", cursor: "pointer" }} />
                     </div>
