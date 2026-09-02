@@ -29,14 +29,12 @@ function SomAoEntrar() {
     room.on(RoomEvent.ParticipantConnected, tocarEntrada);
     room.on(RoomEvent.Connected, tocarEntrada);
     if (room.state === "connected") tocarEntrada();
-    // SAÍDA: quando outro sai, e quando eu desconecto (saio)
+    // SAÍDA: quando outro sai (minha própria saída é tratada no sairDaSala)
     room.on(RoomEvent.ParticipantDisconnected, tocarSaida);
-    room.on(RoomEvent.Disconnected, tocarSaida);
     return () => {
       room.off(RoomEvent.ParticipantConnected, tocarEntrada);
       room.off(RoomEvent.Connected, tocarEntrada);
       room.off(RoomEvent.ParticipantDisconnected, tocarSaida);
-      room.off(RoomEvent.Disconnected, tocarSaida);
     };
   }, [room]);
   return null;
@@ -297,6 +295,7 @@ export default function App() {
     window.history.replaceState(null, "", "?sala=" + servidor.id);
   }
   function sairDaSala() {
+    try { const a = new Audio(SOM_SAIDA); a.volume = 0.5; a.play(); } catch (e) {}
     setSalaAtual(null);
     setToken("");
     window.history.replaceState(null, "", window.location.pathname);
