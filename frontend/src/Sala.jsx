@@ -642,6 +642,8 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
   const [souDono, setSouDono] = useState(false); // sou dono deste servidor?
   const [srvNome, setSrvNome] = useState(nomeServidor || ""); // nome atual (editável)
   const [srvAvatar, setSrvAvatar] = useState(""); // foto do servidor
+  const [srvCodigo, setSrvCodigo] = useState(""); // código de convite
+  const [codigoCopiado, setCodigoCopiado] = useState(false);
   const [editarAberto, setEditarAberto] = useState(false); // modal de edição
   const videoRef = useRef(null);
   const { localParticipant } = useLocalParticipant();
@@ -727,10 +729,11 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
       const { data: u } = await supabase.auth.getUser();
       const meuId = u?.user?.id;
       const { data } = await supabase
-        .from("servidores").select("nome, avatar_url, dono_id").eq("id", salaId).single();
+        .from("servidores").select("nome, avatar_url, dono_id, codigo").eq("id", salaId).single();
       if (!ativo || !data) return;
       setSrvNome(data.nome || "");
       setSrvAvatar(data.avatar_url || "");
+      setSrvCodigo(data.codigo || "");
       if (meuId) setSouDono(data.dono_id === meuId);
     })();
     return () => { ativo = false; };
@@ -767,6 +770,13 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
       setCanalAtual(canais[0].id);
     }
   }, [canais]);
+
+  function copiarCodigo() {
+    if (!srvCodigo) return;
+    navigator.clipboard?.writeText(srvCodigo).catch(() => {});
+    setCodigoCopiado(true);
+    setTimeout(() => setCodigoCopiado(false), 1500);
+  }
 
   const eu = participants.find((p) => p.isLocal);
   const meuNome = eu?.identity || "convidado";
@@ -950,6 +960,13 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
                 {participants.length}
               </span>
             </div>
+            {srvCodigo && (
+              <motion.button whileTap={{ scale: 0.9 }} onClick={copiarCodigo}
+                style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.3)", color: "#c4b5fd", borderRadius: 10, padding: "9px 11px", cursor: "pointer", fontSize: 13, fontWeight: 800, letterSpacing: 0.5 }}
+                title="Copiar código de convite">
+                {codigoCopiado ? "✓" : "📋"} {srvCodigo}
+              </motion.button>
+            )}
             <motion.button whileTap={{ scale: 0.9 }}
               onClick={() => setChatAberto(true)}
               style={{ flexShrink: 0, background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", color: "#fff", borderRadius: 10, padding: "9px 16px", cursor: "pointer", fontSize: 14, fontWeight: 700, boxShadow: "0 3px 12px rgba(124,58,237,0.4)" }}
@@ -992,19 +1009,30 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
       <div style={{ height: "100dvh", display: "flex", background: "#0d0e11", overflow: "hidden" }}>
         {/* Coluna 1: servidor + canal + participantes */}
         <div style={{ width: 250, flexShrink: 0, display: "flex", flexDirection: "column", background: "rgba(20,21,24,0.9)", borderRight: "1px solid rgba(255,255,255,0.06)" }}>
-          <div style={{ padding: "16px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <motion.button whileTap={{ scale: 0.85 }} onClick={onSair}
-              style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#f2f3f5", fontSize: 18, width: 34, height: 34, borderRadius: 8, cursor: "pointer", flexShrink: 0 }}
-              title="Sair do servidor">←</motion.button>
-            <div onClick={() => souDono && setEditarAberto(true)}
-              style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1, cursor: souDono ? "pointer" : "default" }}
-              title={souDono ? "Editar servidor" : ""}>
-              {srvAvatar && (
-                <img src={srvAvatar} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-              )}
-              <span style={{ fontWeight: 800, color: "#f2f3f5", fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{srvNome}</span>
-              {souDono && <span style={{ color: "#8b8f96", fontSize: 12, flexShrink: 0 }}>✏️</span>}
+          <div style={{ padding: "16px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", gap: 10, flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <motion.button whileTap={{ scale: 0.85 }} onClick={onSair}
+                style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#f2f3f5", fontSize: 18, width: 34, height: 34, borderRadius: 8, cursor: "pointer", flexShrink: 0 }}
+                title="Sair do servidor">←</motion.button>
+              <div onClick={() => souDono && setEditarAberto(true)}
+                style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1, cursor: souDono ? "pointer" : "default" }}
+                title={souDono ? "Editar servidor" : ""}>
+                {srvAvatar && (
+                  <img src={srvAvatar} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                )}
+                <span style={{ fontWeight: 800, color: "#f2f3f5", fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{srvNome}</span>
+                {souDono && <span style={{ color: "#8b8f96", fontSize: 12, flexShrink: 0 }}>✏️</span>}
+              </div>
             </div>
+            {srvCodigo && (
+              <motion.button whileTap={{ scale: 0.97 }} onClick={copiarCodigo}
+                style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 8, padding: "7px 10px", cursor: "pointer", width: "100%" }}
+                title="Copiar código de convite">
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#8b8f96", letterSpacing: 0.5 }}>CONVITE</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: "#c4b5fd", letterSpacing: 1, flex: 1, textAlign: "left" }}>{srvCodigo}</span>
+                <span style={{ fontSize: 12, color: codigoCopiado ? "#23a559" : "#8b8f96" }}>{codigoCopiado ? "✓ copiado" : "📋"}</span>
+              </motion.button>
+            )}
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 10px" }}>
