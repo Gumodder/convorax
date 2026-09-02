@@ -10,25 +10,33 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const LIVEKIT_URL = "wss://voz.convorax.space";
 
-// URL do som tocado quando alguém entra na call (arquivo no bucket público 'assets')
-const SOM_ENTRADA = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/som-entrada.mp3";
+// URLs dos sons da call (arquivos no bucket público 'assets')
+const SOM_ENTRADA = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/discord-sounds.mp3";
+const SOM_SAIDA = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/som-saida.mp3";
 
-// Toca um som toda vez que OUTRO participante entra na sala de voz
+// Toca sons quando alguém (ou eu) entra/sai da sala de voz
 function SomAoEntrar() {
   const room = useRoomContext();
   useEffect(() => {
     if (!room) return;
-    const audio = new Audio(SOM_ENTRADA);
-    audio.volume = 0.5;
-    const tocar = () => { try { audio.currentTime = 0; audio.play(); } catch (e) {} };
-    // toca quando OUTRA pessoa entra
-    room.on(RoomEvent.ParticipantConnected, tocar);
-    // toca quando EU entro (conexão estabelecida) ou já estou conectado
-    room.on(RoomEvent.Connected, tocar);
-    if (room.state === "connected") tocar();
+    const somEntrada = new Audio(SOM_ENTRADA);
+    const somSaida = new Audio(SOM_SAIDA);
+    somEntrada.volume = 0.5;
+    somSaida.volume = 0.5;
+    const tocarEntrada = () => { try { somEntrada.currentTime = 0; somEntrada.play(); } catch (e) {} };
+    const tocarSaida = () => { try { somSaida.currentTime = 0; somSaida.play(); } catch (e) {} };
+    // ENTRADA: quando outro entra, quando eu conecto, ou se já estou conectado
+    room.on(RoomEvent.ParticipantConnected, tocarEntrada);
+    room.on(RoomEvent.Connected, tocarEntrada);
+    if (room.state === "connected") tocarEntrada();
+    // SAÍDA: quando outro sai, e quando eu desconecto (saio)
+    room.on(RoomEvent.ParticipantDisconnected, tocarSaida);
+    room.on(RoomEvent.Disconnected, tocarSaida);
     return () => {
-      room.off(RoomEvent.ParticipantConnected, tocar);
-      room.off(RoomEvent.Connected, tocar);
+      room.off(RoomEvent.ParticipantConnected, tocarEntrada);
+      room.off(RoomEvent.Connected, tocarEntrada);
+      room.off(RoomEvent.ParticipantDisconnected, tocarSaida);
+      room.off(RoomEvent.Disconnected, tocarSaida);
     };
   }, [room]);
   return null;
