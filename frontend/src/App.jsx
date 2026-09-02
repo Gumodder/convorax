@@ -10,6 +10,14 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const LIVEKIT_URL = "wss://voz.convorax.space";
 
+// Banners que giram no rodapé (3s cada, com fade)
+const BANNERS = [
+  { img: "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/anuncioglade-cortado.png",
+    href: "https://t.me/gladepaybot", alt: "GladePay - Receba pagamento pelo Telegram" },
+  { img: "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/anuncio-convorax.png",
+    href: "https://wa.me/5518991009445", alt: "Anuncie na Convorax" },
+];
+
 // URLs dos sons da call (arquivos no bucket público 'assets')
 const SOM_ENTRADA = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/discord-sounds.mp3";
 const SOM_SAIDA = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/som-saida.mp3";
@@ -121,6 +129,7 @@ export default function App() {
   const [meuUsername, setMeuUsername] = useState("");   // username do perfil (cai no email se vazio)
   const [bannerFechado, setBannerFechado] = useState(false); // banner de anuncio no rodape
   const [perfilAberto, setPerfilAberto] = useState(false); // menu de perfil aberto (esconde o banner)
+  const [bannerIdx, setBannerIdx] = useState(0); // qual banner esta aparecendo (rotacao)
   const [bugAberto, setBugAberto] = useState(false);   // modal reportar bug
   const [bugTexto, setBugTexto] = useState("");
   const [bugEnviando, setBugEnviando] = useState(false);
@@ -140,6 +149,13 @@ export default function App() {
   }, []);
 
   useEffect(() => { if (sessao) carregarServidores(); }, [sessao]);
+
+  // gira os banners a cada 3s (pausa se fechado ou com o menu de perfil aberto)
+  useEffect(() => {
+    if (bannerFechado || perfilAberto) return;
+    const id = setInterval(() => setBannerIdx((i) => (i + 1) % BANNERS.length), 3000);
+    return () => clearInterval(id);
+  }, [bannerFechado, perfilAberto]);
 
   // Carrega o username do meu perfil (usado na call, chat e tela inicial)
   // + checa se a conta foi banida: desloga na hora e revalida a cada 30s
@@ -333,7 +349,7 @@ export default function App() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        style={{ position: "relative", zIndex: 1, padding: mobile ? "20px 16px" : "32px 48px", paddingBottom: bannerFechado ? undefined : (mobile ? 130 : 230), maxWidth: 1200, margin: "0 auto" }}
+        style={{ position: "relative", zIndex: 1, padding: mobile ? "20px 16px" : "32px 48px", paddingBottom: bannerFechado ? undefined : (mobile ? 160 : 370), maxWidth: 1200, margin: "0 auto" }}
       >
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
           <img src="/logo.png" alt="Convorax" style={{ height: mobile ? 52 : 68 }}
@@ -480,14 +496,16 @@ export default function App() {
               pointerEvents: "none",
             }}
           >
-            <div style={{ position: "relative", width: "100%", maxWidth: 1200, pointerEvents: "auto" }}>
-              <a href="https://t.me/gladepaybot" target="_blank" rel="noreferrer"
-                style={{ display: "block", borderRadius: 12, overflow: "hidden" }}>
-                <img src="https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/anuncioglade-cortado.png"
-                  alt="GladePay - Receba pagamento pelo Telegram"
-                  style={{ display: "block", width: "100%", height: "auto", objectFit: "contain" }}
-                  onError={(e) => { e.currentTarget.closest("div").parentElement.style.display = "none"; }} />
-              </a>
+            <div style={{ position: "relative", width: "100%", maxWidth: 900, aspectRatio: "1827 / 630", pointerEvents: "auto" }}>
+              {BANNERS.map((b, i) => (
+                <a key={i} href={b.href} target="_blank" rel="noreferrer"
+                  style={{ position: "absolute", inset: 0, display: "block", borderRadius: 12, overflow: "hidden",
+                    opacity: bannerIdx === i ? 1 : 0, transition: "opacity 0.6s ease",
+                    pointerEvents: bannerIdx === i ? "auto" : "none" }}>
+                  <img src={b.img} alt={b.alt}
+                    style={{ display: "block", width: "100%", height: "100%", objectFit: "contain" }} />
+                </a>
+              ))}
               <button onClick={() => setBannerFechado(true)} title="Fechar anuncio"
                 style={{
                   position: "absolute", top: -10, right: -10, zIndex: 2,
