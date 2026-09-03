@@ -2,11 +2,12 @@ import {
   useParticipants,
   useTracks,
   useLocalParticipant,
+  useRoomContext,
   AudioTrack,
   VideoTrack,
   LayoutContextProvider,
 } from "@livekit/components-react";
-import { Track } from "livekit-client";
+import { Track, ConnectionState, ConnectionQuality } from "livekit-client";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
@@ -625,6 +626,62 @@ function EditarServidor({ salaId, nomeInicial, avatarInicial, onFechar, onSalvo 
   );
 }
 
+// Indicador de conexão de voz estilo Discord (sinal dinâmico + status)
+function StatusConexao({ sub }) {
+  const room = useRoomContext();
+  const [estado, setEstado] = useState(room?.state || ConnectionState.Connecting);
+  const [qualidade, setQualidade] = useState(room?.localParticipant?.connectionQuality || ConnectionQuality.Unknown);
+
+  useEffect(() => {
+    if (!room) return;
+    setEstado(room.state);
+    setQualidade(room.localParticipant?.connectionQuality || ConnectionQuality.Unknown);
+    const onState = (s) => setEstado(s);
+    const onQual = (q, p) => {
+      if (!p || p.identity === room.localParticipant?.identity) setQualidade(q);
+    };
+    room.on("connectionStateChanged", onState);
+    room.on("connectionQualityChanged", onQual);
+    return () => {
+      room.off("connectionStateChanged", onState);
+      room.off("connectionQualityChanged", onQual);
+    };
+  }, [room]);
+
+  const reconectando = estado === ConnectionState.Reconnecting || estado === ConnectionState.SignalReconnecting;
+  const conectando = estado === ConnectionState.Connecting;
+  const desconectado = estado === ConnectionState.Disconnected;
+
+  let cor, texto, nivel; // nivel: 0-3 barras acesas
+  if (reconectando) { cor = "#f0b232"; texto = "Reconectando…"; nivel = 1; }
+  else if (conectando) { cor = "#f0b232"; texto = "Conectando…"; nivel = 1; }
+  else if (desconectado) { cor = "#f23f43"; texto = "Desconectado"; nivel = 0; }
+  else if (qualidade === ConnectionQuality.Poor) { cor = "#f0b232"; texto = "Conexão instável"; nivel = 1; }
+  else if (qualidade === ConnectionQuality.Lost) { cor = "#f23f43"; texto = "Sinal fraco"; nivel = 0; }
+  else if (qualidade === ConnectionQuality.Good) { cor = "#23a559"; texto = "Voz conectada"; nivel = 2; }
+  else { cor = "#23a559"; texto = "Voz conectada"; nivel = 3; } // Excellent ou Unknown
+
+  const pulsar = reconectando || conectando;
+  const alturas = [7, 11, 15];
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+      <motion.div
+        animate={pulsar ? { opacity: [1, 0.35, 1] } : { opacity: 1 }}
+        transition={pulsar ? { duration: 1, repeat: Infinity } : { duration: 0.2 }}
+        style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 15, flexShrink: 0 }}>
+        {alturas.map((h, i) => (
+          <div key={i} style={{ width: 3.5, height: h, borderRadius: 1.5, background: i < nivel ? cor : "rgba(255,255,255,0.18)" }} />
+        ))}
+      </motion.div>
+      <div style={{ minWidth: 0, lineHeight: 1.25 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: cor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{texto}</div>
+        {sub && <div style={{ fontSize: 11, color: "#8b8f96", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
 export default function Sala({ salaId, nomeServidor, onSair }) {
   const participants = useParticipants();
   const screenShares = useTracks([Track.Source.ScreenShare]);
@@ -977,6 +1034,9 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
 
           {renderAudio}
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(20,21,24,0.9)", flexShrink: 0, padding: "10px 12px", paddingBottom: "calc(10px + env(safe-area-inset-bottom))" }}>
+            <div style={{ marginBottom: 10 }}>
+              <StatusConexao sub={srvNome} />
+            </div>
             <BarraControles />
           </div>
 
@@ -1079,8 +1139,13 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
           </div>
 
           {renderAudio}
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(15,16,19,0.9)", flexShrink: 0, padding: "12px 10px" }}>
-            <BarraControles />
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(15,16,19,0.9)", flexShrink: 0 }}>
+            <div style={{ padding: "10px 12px 0" }}>
+              <StatusConexao sub={srvNome} />
+            </div>
+            <div style={{ padding: "12px 10px" }}>
+              <BarraControles />
+            </div>
           </div>
         </div>
 
