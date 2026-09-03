@@ -626,11 +626,44 @@ function EditarServidor({ salaId, nomeInicial, avatarInicial, onFechar, onSalvo 
   );
 }
 
+// Mede o ping (ms) via estatísticas WebRTC do sender local. Seguro: retorna null se falhar.
+async function medirPing(room) {
+  try {
+    const lp = room?.localParticipant;
+    if (!lp || !lp.trackPublications) return null;
+    let sender = null;
+    lp.trackPublications.forEach((pub) => {
+      if (!sender && pub?.track?.sender && pub.source === Track.Source.Microphone) sender = pub.track.sender;
+    });
+    if (!sender) lp.trackPublications.forEach((pub) => { if (!sender && pub?.track?.sender) sender = pub.track.sender; });
+    if (!sender || !sender.getStats) return null;
+    const stats = await sender.getStats();
+    let rtt = null;
+    stats.forEach((r) => {
+      if (r.type === "remote-inbound-rtp" && typeof r.roundTripTime === "number") rtt = r.roundTripTime;
+    });
+    if (rtt == null) return null;
+    return Math.max(0, Math.round(rtt * 1000));
+  } catch (e) {
+    return null;
+  }
+}
+
 // Indicador de conexão de voz estilo Discord (sinal dinâmico + status)
 function StatusConexao({ sub }) {
   const room = useRoomContext();
   const [estado, setEstado] = useState(room?.state || ConnectionState.Connecting);
   const [qualidade, setQualidade] = useState(room?.localParticipant?.connectionQuality || ConnectionQuality.Unknown);
+  const [ping, setPing] = useState(null);
+
+  useEffect(() => {
+    if (!room || estado !== ConnectionState.Connected) { setPing(null); return; }
+    let ativo = true;
+    const tick = async () => { const p = await medirPing(room); if (ativo) setPing(p); };
+    tick();
+    const id = setInterval(tick, 2000);
+    return () => { ativo = false; clearInterval(id); };
+  }, [room, estado]);
 
   useEffect(() => {
     if (!room) return;
@@ -675,7 +708,12 @@ function StatusConexao({ sub }) {
         ))}
       </motion.div>
       <div style={{ minWidth: 0, lineHeight: 1.25 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: cor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{texto}</div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: cor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{texto}</span>
+          {ping != null && estado === ConnectionState.Connected && (
+            <span style={{ fontSize: 11, fontWeight: 700, flexShrink: 0, color: ping < 80 ? "#23a559" : ping < 180 ? "#f0b232" : "#f23f43" }}>{ping}ms</span>
+          )}
+        </div>
         {sub && <div style={{ fontSize: 11, color: "#8b8f96", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</div>}
       </div>
     </div>
