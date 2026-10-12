@@ -57,6 +57,25 @@ O `autor` continua útil como cache de exibição, mas quem decide autoria passa
 ser o `user_id`. As mensagens antigas ficam com `user_id` nulo — vale rodar um
 `update` casando `autor` com `perfis.username` antes de confiar na coluna.
 
+### Antes de subir: o histórico gravado como `convidado`
+
+Isto é consequência direta do bug do `identity` descrito no commit. Enquanto o
+backend emitia `identity="convidado"` para todo mundo, **tudo que foi escrito no
+chat ficou com `autor: 'convidado'`**. Depois deste deploy as identidades passam
+a ser reais, então essas mensagens não pertencem mais a ninguém: aparecem com o
+cabeçalho "convidado" e nem o autor original consegue apagá-las.
+
+Veja o tamanho do problema antes de decidir:
+
+```sql
+select autor, count(*) from mensagens group by 1 order by 2 desc;
+```
+
+Se a maior parte do histórico estiver sob `convidado`, as opções são migrar
+(só dá com o `user_id` do item 1 abaixo, e mesmo assim a informação de quem
+escreveu se perdeu — não está gravada em lugar nenhum) ou limpar. Não há como
+recuperar a autoria: ela nunca chegou ao banco.
+
 ## 2. "Só o dono apaga" é só enfeite da tela
 
 **Onde:** `frontend/src/Sala.jsx` — `podeApagar = meu || souDono`.

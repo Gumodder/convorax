@@ -33,6 +33,13 @@ function tocar(url, volume = 0.5) {
   } catch { /* som e enfeite: nunca pode quebrar a call */ }
 }
 
+// identity agora e o id do usuario (unico, evita o LiveKit derrubar quem repete
+// nome); o nome bonito vem no campo `name` do token. Tudo que aparece na tela
+// passa por aqui.
+function nomeDe(participant) {
+  return participant?.name || participant?.identity || "?";
+}
+
 const CORES = ["#a855f7", "#3b82f6", "#06b6d4", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#14b8a6", "#f97316"];
 function corDoNome(nome) {
   let h = 0;
@@ -61,21 +68,21 @@ function Avatar({ participant, avatarUrl, onVolume, mudoLocal, onToggleMudo }) {
       setTransmitindo(participant.isScreenShareEnabled);
       setComCamera(participant.isCameraEnabled);
     };
+    // "trackPublished"/"trackUnpublished" so sao emitidos por participante
+    // REMOTO. O participante local emite "localTrackPublished"/"localTrackUnpublished",
+    // entao sem estes dois o meu proprio quadradinho ficava com o badge de mutado
+    // aceso enquanto eu falava, e a camera nao aparecia ate o primeiro mute.
+    const eventos = ["trackMuted", "trackUnmuted", "trackPublished", "trackUnpublished",
+                     "localTrackPublished", "localTrackUnpublished"];
     participant.on("isSpeakingChanged", updateFala);
-    participant.on("trackMuted", updateTracks);
-    participant.on("trackUnmuted", updateTracks);
-    participant.on("trackPublished", updateTracks);
-    participant.on("trackUnpublished", updateTracks);
+    eventos.forEach((ev) => participant.on(ev, updateTracks));
     updateTracks();
     return () => {
       participant.off("isSpeakingChanged", updateFala);
-      participant.off("trackMuted", updateTracks);
-      participant.off("trackUnmuted", updateTracks);
-      participant.off("trackPublished", updateTracks);
-      participant.off("trackUnpublished", updateTracks);
+      eventos.forEach((ev) => participant.off(ev, updateTracks));
     };
   }, [participant]);
-  const nome = participant.identity || "?";
+  const nome = nomeDe(participant);
   const inicial = nome.charAt(0).toUpperCase();
   const cor = corDoNome(nome);
   const ativo = falando && !mutado;
@@ -88,7 +95,9 @@ function Avatar({ participant, avatarUrl, onVolume, mudoLocal, onToggleMudo }) {
   const [mostrarVol, setMostrarVol] = useState(false);
   function mudarVolume(v) {
     setVolumeState(v);
-    if (onVolume) onVolume(nome, v);
+    // a chave do volume e a IDENTITY (unica), nao o nome de exibicao: o mapa
+    // micVol e lido por participant.identity la no renderAudio
+    if (onVolume) onVolume(participant.identity, v);
   }
   return (
     <motion.div
@@ -225,21 +234,17 @@ function ParticipanteMini({ participant, avatarUrl }) {
   useEffect(() => {
     const uf = () => setFalando(participant.isSpeaking);
     const um = () => { setMutado(!participant.isMicrophoneEnabled); setTransmitindo(participant.isScreenShareEnabled); };
+    const eventos = ["trackMuted", "trackUnmuted", "trackPublished", "trackUnpublished",
+                     "localTrackPublished", "localTrackUnpublished"];
     participant.on("isSpeakingChanged", uf);
-    participant.on("trackMuted", um);
-    participant.on("trackUnmuted", um);
-    participant.on("trackPublished", um);
-    participant.on("trackUnpublished", um);
+    eventos.forEach((ev) => participant.on(ev, um));
     um();
     return () => {
       participant.off("isSpeakingChanged", uf);
-      participant.off("trackMuted", um);
-      participant.off("trackUnmuted", um);
-      participant.off("trackPublished", um);
-      participant.off("trackUnpublished", um);
+      eventos.forEach((ev) => participant.off(ev, um));
     };
   }, [participant]);
-  const nome = participant.identity || "?";
+  const nome = nomeDe(participant);
   const cor = corDoNome(nome);
   const ativo = falando && !mutado;
   return (
@@ -769,28 +774,12 @@ function StatusConexao({ sub }) {
 // React a via como um componente NOVO a cada render e remontava a arvore — o
 // estado interno (micOn/camOn) voltava ao valor inicial e o botao do microfone
 // mentia sobre o proprio estado sempre que qualquer coisa no Sala mudava.
-function BarraControles({ localParticipant, mobile, transmitindo, onTransmitir, onSair }) {
-  const [micOn, setMicOn] = useState(localParticipant?.isMicrophoneEnabled ?? true);
-  const [camOn, setCamOn] = useState(localParticipant?.isCameraEnabled ?? false);
-  useEffect(() => {
-    if (!localParticipant) return;
-    const upd = () => {
-      setMicOn(localParticipant.isMicrophoneEnabled);
-      setCamOn(localParticipant.isCameraEnabled);
-    };
-    localParticipant.on("trackMuted", upd);
-    localParticipant.on("trackUnmuted", upd);
-    localParticipant.on("trackPublished", upd);
-    localParticipant.on("trackUnpublished", upd);
-    upd();
-    return () => {
-      localParticipant.off("trackMuted", upd);
-      localParticipant.off("trackUnmuted", upd);
-      localParticipant.off("trackPublished", upd);
-      localParticipant.off("trackUnpublished", upd);
-    };
-  }, [localParticipant]);
-
+// micOn/camOn NAO sao estado local de proposito. Espelhar os booleanos em
+// useState exigia escutar os eventos certos do participante local
+// ("localTrackPublished", nao "trackPublished") — errar isso deixava o botao
+// dizendo "Mutado" com o microfone aberto, e o clique virava no-op. O hook
+// useLocalParticipant ja observa os eventos certos e devolve a verdade.
+function BarraControles({ localParticipant, micOn, camOn, mobile, transmitindo, onTransmitir, onSair }) {
   async function toggleMic() {
     if (!localParticipant) return;
     try { await localParticipant.setMicrophoneEnabled(!micOn); }
@@ -835,7 +824,7 @@ function BarraControles({ localParticipant, mobile, transmitindo, onTransmitir, 
   );
 }
 
-export default function Sala({ salaId, nomeServidor, onSair }) {
+export default function Sala({ salaId, nomeServidor, meuNome: meuNomeProp, onSair }) {
   const participants = useParticipants();
   const screenShares = useTracks([Track.Source.ScreenShare]);
   const [chatAberto, setChatAberto] = useState(false);
@@ -856,7 +845,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
   const [codigoCopiado, setCodigoCopiado] = useState(false);
   const [editarAberto, setEditarAberto] = useState(false); // modal de edição
   const videoRef = useRef(null);
-  const { localParticipant } = useLocalParticipant();
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   const micTracks = useTracks([Track.Source.Microphone]);
   const telaAudioTracks = useTracks([Track.Source.ScreenShareAudio]);
 
@@ -883,27 +872,21 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Busca o avatar SO de quem esta na call. Antes isso era um select sem filtro
-  // nenhum, que baixava o diretorio inteiro de usuarios da plataforma (username,
-  // avatar e email_nome de todo mundo) e ainda batia no teto de 1000 linhas do
-  // PostgREST — passando disso, quem entrasse depois ficava sem foto.
-  const identidades = participants.map((p) => p.identity).filter(Boolean);
-  const chaveIdentidades = identidades.slice().sort().join("|");
+  // Busca o avatar SO de quem esta na call. Antes era um select sem filtro nenhum,
+  // que baixava o diretorio inteiro de usuarios da plataforma e ainda batia no
+  // teto de 1000 linhas do PostgREST — passando disso, quem entrasse depois
+  // ficava sem foto. Como identity agora e o id do usuario, isso casa direto com
+  // perfis.id: nao depende mais de username nem de email_nome combinarem.
+  const chaveIdentidades = participants.map((p) => p.identity).filter(Boolean).sort().join("|");
   useEffect(() => {
-    const nomes = chaveIdentidades ? chaveIdentidades.split("|") : [];
-    if (!nomes.length) return;
+    const ids = chaveIdentidades ? chaveIdentidades.split("|") : [];
+    if (!ids.length) return;
     let ativo = true;
     (async () => {
-      // dois .in() em vez de um .or() montado por string: o cliente escapa os
-      // valores, entao um username com virgula ou parentese nao quebra a query
-      const [porUsername, porEmail] = await Promise.all([
-        supabase.from("perfis").select("username, avatar_url").in("username", nomes),
-        supabase.from("perfis").select("email_nome, avatar_url").in("email_nome", nomes),
-      ]);
-      if (!ativo) return;
+      const { data } = await supabase.from("perfis").select("id, avatar_url").in("id", ids);
+      if (!ativo || !data) return;
       const mapa = {};
-      (porUsername.data || []).forEach((p) => { if (p.avatar_url && p.username) mapa[p.username] = p.avatar_url; });
-      (porEmail.data || []).forEach((p) => { if (p.avatar_url && p.email_nome) mapa[p.email_nome] = p.avatar_url; });
+      data.forEach((p) => { if (p.avatar_url) mapa[p.id] = p.avatar_url; });
       setPerfis(mapa);
     })();
     return () => { ativo = false; };
@@ -1009,7 +992,14 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
   }
 
   const eu = participants.find((p) => p.isLocal);
-  const meuNome = eu?.identity || "convidado";
+  // O participante local nasce com identity vazia e so recebe a de verdade quando
+  // a call conecta. Enquanto isso meuNome virava "convidado" — e como todo o
+  // historico antigo foi gravado com esse autor, o chat inteiro aparecia como
+  // "minhas mensagens", com a lixeira armada sobre a mensagem dos outros.
+  // O backend devolve o nome junto com o token, entao ele ja e certo no 1o render.
+  // nao usa nomeDe() aqui: ele devolve "?" quando nao ha participante, e "?"
+  // viraria o autor gravado nas mensagens
+  const meuNome = meuNomeProp || eu?.name || eu?.identity || "convidado";
 
   function telaCheia(el) {
     const alvo = el || videoRef.current;
@@ -1052,7 +1042,8 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
           gridTemplateColumns: screenShares.length > 1 ? "repeat(auto-fit, minmax(320px, 1fr))" : "1fr",
         }}>
           {screenShares.map((track) => {
-            const dono = track.participant.identity;
+            const dono = track.participant.identity;      // chave dos controles de volume
+            const nomeDono = nomeDe(track.participant);   // o que aparece na tela
             const temAudio = telaAudioTracks.some((a) => a.participant.identity === dono);
             const mutado = telaMute[dono];
             const vol = telaVol[dono] ?? 100;
@@ -1060,7 +1051,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
               <div key={track.publication.trackSid} data-tela style={{ position: "relative", background: "#000", borderRadius: 12, overflow: "hidden" }}>
                 <div style={{ position: "absolute", top: 10, left: 12, zIndex: 2, display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 20 }}>
-                    🖥 {dono}
+                    🖥 {nomeDono}
                   </span>
                   <span style={{ background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 20, display: "inline-flex", alignItems: "center", gap: 4 }}
                     title="Pessoas vendo a transmissão">
@@ -1138,7 +1129,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
             <div style={{ marginBottom: 10 }}>
               <StatusConexao sub={srvNome} />
             </div>
-            <BarraControles localParticipant={localParticipant} mobile={mobile} transmitindo={transmitindo} onTransmitir={toggleTransmissao} onSair={onSair} />
+            <BarraControles localParticipant={localParticipant} micOn={isMicrophoneEnabled} camOn={isCameraEnabled} mobile={mobile} transmitindo={transmitindo} onTransmitir={toggleTransmissao} onSair={onSair} />
           </div>
 
           <AnimatePresence>
@@ -1245,7 +1236,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
               <StatusConexao sub={srvNome} />
             </div>
             <div style={{ padding: "12px 10px" }}>
-              <BarraControles localParticipant={localParticipant} mobile={mobile} transmitindo={transmitindo} onTransmitir={toggleTransmissao} onSair={onSair} />
+              <BarraControles localParticipant={localParticipant} micOn={isMicrophoneEnabled} camOn={isCameraEnabled} mobile={mobile} transmitindo={transmitindo} onTransmitir={toggleTransmissao} onSair={onSair} />
             </div>
           </div>
         </div>

@@ -134,6 +134,8 @@ export default function App() {
   const [bugEnviando, setBugEnviando] = useState(false);
   const [bugMsg, setBugMsg] = useState("");
   const [entrandoEm, setEntrandoEm] = useState(null); // id do servidor em que estou entrando
+  const [nomeNaCall, setNomeNaCall] = useState("");    // nome que o backend emitiu no token
+  const saindoDeProposito = useRef(false);             // distingue "cliquei em sair" de "a call caiu"
   const presencaRef = useRef(null);
 
   useEffect(() => {
@@ -295,6 +297,8 @@ export default function App() {
         },
         body: JSON.stringify({ texto: t }),
       });
+      if (r.status === 429) { setBugMsg("Erro: voce ja mandou varios relatos. Espere uns minutos."); return; }
+      if (r.status === 401) { setBugMsg("Erro: sua sessao expirou. Entre de novo."); return; }
       if (!r.ok) throw new Error();
       setBugMsg("Enviado! Valeu 🙌");
       setBugTexto("");
@@ -330,13 +334,19 @@ export default function App() {
         if (res.status === 401) setAviso("Sua sessao expirou. Entre de novo.");
         else if (res.status === 403) setAviso("Voce nao e membro deste servidor.");
         else if (res.status === 429) setAviso("Muitas tentativas seguidas. Espere alguns segundos.");
-        else setAviso("Servidor de voz indisponivel. Tente de novo em instantes.");
+        else if (res.status === 400) setAviso("Esse servidor tem um identificador invalido.");
+        else if (res.status >= 500) setAviso("Servidor de voz indisponivel. Tente de novo em instantes.");
+        else setAviso("Nao foi possivel entrar na call.");
         return;
       }
 
       const data = await res.json();
       if (!data.token) { setAviso("Nao foi possivel entrar na call."); return; }
 
+      // o backend diz quem eu sou: sem isso o app se chamava "convidado" durante
+      // toda a janela de conexao e confundia o historico com as proprias mensagens
+      setNomeNaCall(data.nome || "");
+      saindoDeProposito.current = false;
       setToken(data.token);
       setSalaAtual(servidor);
       window.history.replaceState(null, "", "?sala=" + servidor.id);
@@ -350,10 +360,22 @@ export default function App() {
     }
   }
   function sairDaSala() {
+    saindoDeProposito.current = true;
     try { const a = new Audio(SOM_SAIDA); a.volume = 0.5; a.play()?.catch(() => {}); } catch { /* autoplay bloqueado */ }
     setSalaAtual(null);
     setToken("");
+    setNomeNaCall("");
     window.history.replaceState(null, "", window.location.pathname);
+  }
+
+  // O LiveKitRoom chama onDisconnected tanto quando EU saio quanto quando a
+  // conexao cai (rede, token expirado). Sem distinguir, uma queda devolvia o
+  // usuario pra lista de servidores sem explicacao nenhuma.
+  function aoDesconectar() {
+    if (!saindoDeProposito.current) {
+      setAviso("A conexao com a call caiu. Voce pode entrar de novo.");
+    }
+    sairDaSala();
   }
 
   if (!sessao) return <Login />;
@@ -368,10 +390,10 @@ export default function App() {
         audio={true}
         options={{ webAudioMix: true }}
         audioCaptureDefaults={{ noiseSuppression: true, echoCancellation: true, autoGainControl: true }}
-        onDisconnected={sairDaSala}
+        onDisconnected={aoDesconectar}
         style={{ height: "100vh" }}
       >
-        <Sala salaId={salaAtual.id} nomeServidor={salaAtual.nome} onSair={sairDaSala} />
+        <Sala salaId={salaAtual.id} nomeServidor={salaAtual.nome} meuNome={nomeNaCall} onSair={sairDaSala} />
         <SomAoEntrar />
       </LiveKitRoom>
     );

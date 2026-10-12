@@ -20,3 +20,15 @@ export const SUPABASE_KEY =
 
 // Arquivos publicos (sons e banners) ficam no bucket 'assets' do proprio Supabase
 export const ASSETS = `${SUPABASE_URL}/storage/v1/object/public/assets`;
+
+// Fallback silencioso e perigoso: um build sem .env sai apontando para a base de
+// producao e parece funcionar perfeitamente — o pior tipo de erro. O aviso
+// aparece no console do `npm run build`, que e onde a pessoa esta olhando.
+for (const [chave, valor] of Object.entries({
+  VITE_API_URL: env.VITE_API_URL,
+  VITE_LIVEKIT_URL: env.VITE_LIVEKIT_URL,
+  VITE_SUPABASE_URL: env.VITE_SUPABASE_URL,
+  VITE_SUPABASE_ANON_KEY: env.VITE_SUPABASE_ANON_KEY,
+})) {
+  if (!valor) console.warn(`[config] ${chave} ausente — usando o valor de producao`);
+}

@@ -11,7 +11,16 @@ externos — esta receita nao instala nenhum dos dois.
 |---|---|
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | painel do LiveKit Cloud (Settings → Keys) ou o `livekit.yaml` do seu servidor |
 | `SUPABASE_ANON_KEY` | painel do Supabase → Project Settings → API (é a mesma chave publica do frontend) |
-| DNS apontando para o IP da VPS | `convorax.space` (site) e `api.convorax.space` (backend) → `147.79.100.61` |
+| DNS apontando para o IP da VPS | `convorax.space` (site) e `api.convorax.space` (backend) |
+| Um servidor LiveKit de pe | o `VITE_LIVEKIT_URL` (ex.: `wss://voz.convorax.space`) **nao e criado por este roteiro** — veja abaixo |
+
+> **Sobre o LiveKit:** este roteiro sobe o site e o backend de tokens, mas a
+> media (a voz em si) trafega por um servidor LiveKit, que e outra coisa. Se voce
+> usa o **LiveKit Cloud**, o `wss://` vem pronto do painel e nao ha nada a
+> instalar. Se voce hospeda o LiveKit na propria VPS, ele precisa do seu proprio
+> DNS, do proprio TLS e das portas UDP liberadas — siga
+> <https://docs.livekit.io/home/self-hosting/deployment/> antes de continuar. Sem
+> isso o app abre, loga e lista servidores, mas ninguem se ouve.
 
 ## 1. Dependencias do sistema
 
@@ -31,11 +40,21 @@ nao esbarra em permissao depois.
 
 ```bash
 sudo useradd --system --create-home --home-dir /opt/convorax --shell /usr/sbin/nologin convorax
+sudo chmod 755 /opt/convorax      # NAO PULE: veja o aviso abaixo
 sudo -u convorax git clone https://github.com/gumodder/convorax.git /opt/convorax/app
 ```
 
+> **O `chmod` nao e opcional.** No Ubuntu 24.04+ o `useradd` cria o home em
+> `0750` (`HOME_MODE` no `/etc/login.defs`). Os arquivos la dentro saem
+> legiveis, mas o nginx roda como `www-data` e **nao consegue atravessar** o
+> diretorio: o site inteiro responde **403**, e o `cd` do passo 3 falha. Confira
+> agora mesmo:
+>
+> ```bash
+> sudo -u www-data stat /opt/convorax >/dev/null && echo "ok, nginx atravessa"
+> ```
+
 > Daqui em diante todo comando que mexe no codigo vai com `sudo -u convorax`.
-> O nginx so precisa **ler** `dist/`, e os arquivos ja saem legiveis por todos.
 
 ## 3. Backend
 
@@ -81,6 +100,10 @@ EnvironmentFile=/opt/convorax/app/backend/.env
 ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=5
+# o processo agora SAI em erro fatal (porta ocupada, excecao nao tratada) para o
+# systemd reiniciar limpo; o limite evita que um erro permanente vire loop
+StartLimitIntervalSec=60
+StartLimitBurst=5
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
@@ -203,9 +226,32 @@ O nginx serve `dist/` direto do disco — nao precisa recarregar.
 ## Conferindo se ficou de pe
 
 ```bash
-curl https://api.convorax.space/health                  # {"ok":true,...}
-curl -i https://api.convorax.space/token?room=x         # 401 (tem que exigir login)
+# 1. o backend esta vivo
+curl https://api.convorax.space/health
+# -> {"ok":true,"uptime":...}
+
+# 2. sem login nao sai token (era exatamente o buraco que a reescrita fechou)
+curl -s -o /dev/null -w '%{http_code}\n' https://api.convorax.space/token?room=x
+# -> 401
+
+# 3. com login valido, mas servidor do qual voce NAO e membro
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer <access_token de um usuario>" \
+  "https://api.convorax.space/token?room=<uuid de um servidor alheio>"
+# -> 403   (se vier 200, a policy de SELECT de 'servidores' esta aberta demais:
+#           o backend confia nela para saber quem e membro — ver SUPABASE.md)
+
+# 4. a porta do backend NAO pode estar exposta
+sudo ss -ltnp | grep 3001
+# -> 127.0.0.1:3001   (se aparecer 0.0.0.0:3001, o HOST do .env esta errado)
+
+# 5. o bundle aponta pro backend certo
+grep -o 'https://api\.[a-z.]*' /opt/convorax/app/frontend/dist/assets/*.js | sort -u
 ```
+
+Pegue o `access_token` do passo 3 no navegador logado, com
+`JSON.parse(localStorage[Object.keys(localStorage).find(k=>k.includes('auth-token'))]).access_token`
+no console.
 
 No navegador: abrir `https://convorax.space`, criar conta, criar servidor,
 entrar na voz. Se o microfone nao aparecer, confira o cadeado do HTTPS.
@@ -215,6 +261,7 @@ entrar na voz. Se o microfone nao aparecer, confira o cadeado do HTTPS.
 | Sintoma | Olhe |
 |---|---|
 | "Nao foi possivel entrar na call" | `journalctl -u convorax-api -n 50` — provavel chave do LiveKit errada ou CORS |
+| **403 em todo o site** | `sudo -u www-data stat /opt/convorax` — se der "Permission denied", faltou o `chmod 755` do passo 2 |
 | Pagina em branco | o `npm run build` rodou? `ls /opt/convorax/app/frontend/dist/index.html` |
 | F5 numa sala da 404 | falta o `try_files ... /index.html` no nginx |
 | Entra na call mas ninguem se ouve | o site esta em HTTPS? o `VITE_LIVEKIT_URL` aponta para um `wss://` valido? |

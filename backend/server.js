@@ -19,7 +19,16 @@ const ORIGENS = (process.env.CORS_ORIGINS || "")
   .filter(Boolean);
 // Validade do token do LiveKit. Curta o bastante para limitar o estrago de um vazamento,
 // longa o bastante para uma call inteira.
-const TOKEN_TTL = process.env.TOKEN_TTL || "6h";
+// process.env sempre devolve string, e o SDK so converte para "<n>s" quando o ttl
+// e typeof number — uma string "21600" ia crua para o jose e estourava
+// "Invalid time period format", derrubando 100% das entradas em call com 503.
+const TTL_BRUTO = (process.env.TOKEN_TTL || "6h").trim();
+const TOKEN_TTL = /^\d+$/.test(TTL_BRUTO) ? Number(TTL_BRUTO) : TTL_BRUTO;
+// Endereco de escuta. Loopback por padrao: quem fala com o backend e o nginx, da
+// propria maquina. Sem isso o Node escuta em 0.0.0.0 e a porta 3001 fica exposta
+// na internet ate o firewall ser configurado — e, pior, com "trust proxy" ligado
+// qualquer um poderia forjar X-Forwarded-For e furar o rate limit.
+const HOST = process.env.HOST || "127.0.0.1";
 
 // Falha no boot, nao no primeiro request: um backend sem chave emitiria tokens invalidos
 // silenciosamente e o usuario so descobriria ao tentar entrar na call.
@@ -32,6 +41,18 @@ const FALTANDO = Object.entries({
 if (FALTANDO.length) {
   console.error(`[boot] faltam variaveis de ambiente: ${FALTANDO.join(", ")}`);
   console.error("[boot] copie backend/.env.example para backend/.env e preencha.");
+  process.exit(1);
+}
+
+// Emite um token descartavel so para provar que o TTL e aceito: melhor estourar
+// aqui, visivel no systemctl status, do que no primeiro usuario que tentar falar.
+try {
+  const teste = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, { identity: "boot", ttl: TOKEN_TTL });
+  teste.addGrant({ roomJoin: true, room: "boot" });
+  await teste.toJwt();
+} catch (e) {
+  console.error(`[boot] TOKEN_TTL invalido (${TTL_BRUTO}): ${e.message}`);
+  console.error('[boot] use "6h", "30m" ou um numero de segundos.');
   process.exit(1);
 }
 
@@ -131,8 +152,10 @@ async function exigirLogin(req, res, next) {
   }
 }
 
-// UUID v4 — o id do servidor vem do cliente, entao nao confiamos no formato.
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// O id do servidor vem do cliente, entao conferimos o formato. Sem travar a
+// VERSAO do UUID: exigir v4 deixaria um servidor com id v1/v7 impossivel de
+// entrar, com mensagem apontando para o lugar errado.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ---------------------------------------------------------------------------
 // GET /token — emite o AccessToken do LiveKit, so para membro do servidor.
@@ -144,16 +167,25 @@ app.get("/token", criarLimite({ janelaMs: 60_000, max: 30 }), exigirLogin, async
   try {
     const db = supabaseComoUsuario(req.jwt);
 
-    // 1) conta banida nao entra em call nenhuma
+    // 1) Perfil: so para saber o nome de exibicao e se a conta esta banida.
+    //    Esta leitura NAO e fatal de proposito. Se a coluna mudar de nome ou a
+    //    policy nao expor uma delas, derrubar aqui travaria 100% das calls com
+    //    um 503 generico mandando todo mundo "tentar de novo" para sempre.
+    //    O ban de verdade tem que morar nas policies do banco (SUPABASE.md),
+    //    nao numa leitura que o proprio banido executa.
     const { data: perfil, error: erroPerfil } = await db
       .from("perfis")
-      .select("username, email_nome, banido")
+      .select("username, banido")
       .eq("id", req.usuario.id)
       .maybeSingle();
-    if (erroPerfil) throw erroPerfil;
+    if (erroPerfil) {
+      console.error(`[token] perfil ilegivel (${erroPerfil.code || "?"}): ${erroPerfil.message} — seguindo com o nome do email`);
+    }
     if (perfil?.banido) return res.status(403).json({ erro: "Conta banida" });
 
     // 2) o RLS responde se ele e membro: se enxerga a linha, e membro.
+    //    (Vale so enquanto a policy de SELECT de 'servidores' for restrita a
+    //    membros — ver SUPABASE.md. Se ela afrouxar, esta checagem afrouxa junto.)
     const { data: servidor, error: erroServidor } = await db
       .from("servidores")
       .select("id")
@@ -162,24 +194,34 @@ app.get("/token", criarLimite({ janelaMs: 60_000, max: 30 }), exigirLogin, async
     if (erroServidor) throw erroServidor;
     if (!servidor) return res.status(403).json({ erro: "Voce nao e membro deste servidor" });
 
-    // 3) a identidade vem do SERVIDOR, nunca do cliente: sem isso qualquer um
-    //    entrava na call com o nome de outra pessoa.
-    const identidade =
+    // 3) IDENTIDADE = id do usuario. No LiveKit a identity e a chave unica do
+    //    participante na sala: dois participantes com a mesma identity fazem o
+    //    servidor derrubar o primeiro com DUPLICATE_IDENTITY. Nome de usuario e
+    //    prefixo de email colidem a toa (gu@gmail.com e gu@hotmail.com viram
+    //    "gu"), entao o nome bonito vai no campo `name`, que pode repetir.
+    //    A cadeia do nome e a MESMA que o frontend sempre usou
+    //    (username || prefixo do email), para o historico do chat continuar
+    //    casando com quem escreveu.
+    const nome =
       perfil?.username ||
-      perfil?.email_nome ||
       (req.usuario.email ? req.usuario.email.split("@")[0] : null) ||
       req.usuario.id;
 
     const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
-      identity: identidade,
-      name: identidade,
+      identity: req.usuario.id,
+      name: nome,
       ttl: TOKEN_TTL,
     });
     at.addGrant({ roomJoin: true, room: sala, canPublish: true, canSubscribe: true });
 
-    res.json({ token: await at.toJwt() });
+    // devolve o nome junto: o frontend precisa saber quem e ANTES de a call
+    // conectar, senao ele se chama "convidado" durante a janela de conexao e
+    // confunde o historico com as proprias mensagens.
+    res.json({ token: await at.toJwt(), nome, identity: req.usuario.id });
   } catch (e) {
-    console.error("[token] falha:", e.message);
+    // com o usuario e a sala no log da pra diagnosticar "o fulano nao entra"
+    // direto no journalctl, em vez de adivinhar
+    console.error(`[token] falha para ${req.usuario?.id} na sala ${sala}:`, e.message);
     res.status(503).json({ erro: "Nao foi possivel entrar na call agora" });
   }
 });
@@ -201,24 +243,26 @@ app.post("/reportar-bug", criarLimite({ janelaMs: 300_000, max: 5 }), exigirLogi
   const quando = new Date().toISOString();
   console.log(`[bug] ${quando} ${autor}: ${texto.replace(/\s+/g, " ")}`);
 
-  if (TELEGRAM_TOKEN && TELEGRAM_CHAT) {
-    try {
-      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT,
-          text: `🐛 Convorax — bug reportado\n\nDe: ${autor}\n\n${texto}`,
-        }),
-        signal: AbortSignal.timeout(8000),
-      });
-    } catch (e) {
-      // O relato ja esta no log: avisar no Telegram e bonus, nao pode derrubar a resposta.
-      console.error("[bug] telegram falhou:", e.message);
-    }
-  }
-
+  // Responde JA: o relato ja esta no log, e avisar no Telegram e bonus. Esperar
+  // o Telegram deixava o usuario olhando "Enviando..." por ate 8s quando a API
+  // deles estava lenta.
   res.json({ ok: true });
+
+  if (TELEGRAM_TOKEN && TELEGRAM_CHAT) {
+    fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_CHAT,
+        text: `🐛 Convorax — bug reportado\n\nDe: ${autor}\n\n${texto}`,
+      }),
+      signal: AbortSignal.timeout(8000),
+    })
+      // 200 do fetch nao quer dizer que o Telegram aceitou: chat_id errado
+      // devolve 400 com ok:false e o relato sumiria em silencio.
+      .then(async (r) => { if (!r.ok) console.error("[bug] telegram recusou:", r.status, (await r.text()).slice(0, 200)); })
+      .catch((e) => console.error("[bug] telegram falhou:", e.message));
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -231,19 +275,42 @@ app.use((_req, res) => res.status(404).json({ erro: "Rota nao encontrada" }));
 
 // Ultimo guarda-chuva: erro em rota nao derruba o processo.
 app.use((err, _req, res, _next) => {
+  // corpo malformado e erro do cliente: devolver 500 mandava o frontend dizer
+  // "servidor indisponivel" para um request que nunca ia funcionar
+  if (err?.type === "entity.parse.failed" || err instanceof SyntaxError) {
+    return res.status(400).json({ erro: "JSON invalido" });
+  }
+  if (err?.type === "entity.too.large") {
+    return res.status(413).json({ erro: "Corpo grande demais" });
+  }
   console.error("[erro]", err);
   res.status(500).json({ erro: "Erro interno" });
 });
 
-const servidor = app.listen(PORT, () => {
-  console.log(`[boot] Convorax backend rodando na porta ${PORT}`);
+const servidor = app.listen(PORT, HOST, () => {
+  console.log(`[boot] Convorax backend rodando em ${HOST}:${PORT}`);
   console.log(`[boot] CORS: ${ORIGENS.length ? ORIGENS.join(", ") : "liberado (defina CORS_ORIGINS em producao)"}`);
 });
 
-// Uma promise rejeitada sem catch mata o Node 22. Em um servidor de voz isso
-// significa a call inteira caindo — logamos e seguimos.
-process.on("unhandledRejection", (motivo) => console.error("[unhandledRejection]", motivo));
-process.on("uncaughtException", (e) => console.error("[uncaughtException]", e));
+// Sem este handler o EADDRINUSE de um restart chegava como excecao nao
+// capturada. Como o handler abaixo so logava, o processo continuava vivo sem
+// escutar nada: o systemd via "active (running)" e o Restart=always nunca
+// entrava — API morta ate alguem reparar na mao.
+servidor.on("error", (e) => {
+  console.error(`[boot] nao foi possivel escutar em ${HOST}:${PORT}:`, e.message);
+  process.exit(1);
+});
+
+// Uma promise rejeitada sem catch e um estado que nao da pra confiar. Logamos o
+// stack e SAIMOS, deixando o systemd reiniciar limpo (o unit tem Restart=always
+// e StartLimit para nao virar loop).
+process.on("unhandledRejection", (motivo) => {
+  console.error("[unhandledRejection]", motivo);
+});
+process.on("uncaughtException", (e) => {
+  console.error("[uncaughtException]", e?.stack || e);
+  process.exit(1);
+});
 
 // Shutdown limpo: o systemd manda SIGTERM no restart.
 for (const sinal of ["SIGTERM", "SIGINT"]) {
