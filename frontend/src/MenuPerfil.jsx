@@ -24,7 +24,11 @@ export default function MenuPerfil({ sessao, onAbertoChange }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  useEffect(() => { if (onAbertoChange) onAbertoChange(aberto); }, [aberto]);
+  // guardado em ref: o pai passa uma funcao nova a cada render dele, e colocar
+  // onAbertoChange na lista de deps faria o effect disparar em loop
+  const avisarAberto = useRef(onAbertoChange);
+  useEffect(() => { avisarAberto.current = onAbertoChange; }, [onAbertoChange]);
+  useEffect(() => { avisarAberto.current?.(aberto); }, [aberto]);
 
   useEffect(() => {
     supabase.from("perfis").select("avatar_url, username").eq("id", sessao.user.id).single()

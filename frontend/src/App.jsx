@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 import Login from "./Login";
 import Sala from "./Sala";
@@ -7,20 +7,19 @@ import { LiveKitRoom, useRoomContext } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { RoomEvent } from "livekit-client";
 import { motion, AnimatePresence } from "framer-motion";
-
-const LIVEKIT_URL = "wss://voz.convorax.space";
+import { API_URL, ASSETS, LIVEKIT_URL } from "./config";
 
 // Banners que giram no rodapé (3s cada, com fade)
 const BANNERS = [
-  { img: "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/anuncioglade-cortado.png",
+  { img: `${ASSETS}/anuncioglade-cortado.png`,
     href: "https://t.me/gladepaybot", alt: "GladePay - Receba pagamento pelo Telegram" },
-  { img: "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/anuncio-convorax.png",
+  { img: `${ASSETS}/anuncio-convorax.png`,
     href: "https://wa.me/5518991009445", alt: "Anuncie na Convorax" },
 ];
 
 // URLs dos sons da call (arquivos no bucket público 'assets')
-const SOM_ENTRADA = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/discord-sounds.mp3";
-const SOM_SAIDA = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/som-saida.mp3";
+const SOM_ENTRADA = `${ASSETS}/discord-sounds.mp3`;
+const SOM_SAIDA = `${ASSETS}/som-saida.mp3`;
 
 // Toca sons quando alguém (ou eu) entra/sai da sala de voz
 function SomAoEntrar() {
@@ -31,8 +30,8 @@ function SomAoEntrar() {
     const somSaida = new Audio(SOM_SAIDA);
     somEntrada.volume = 0.5;
     somSaida.volume = 0.5;
-    const tocarEntrada = () => { try { somEntrada.currentTime = 0; somEntrada.play(); } catch (e) {} };
-    const tocarSaida = () => { try { somSaida.currentTime = 0; somSaida.play(); } catch (e) {} };
+    const tocarEntrada = () => { try { somEntrada.currentTime = 0; somEntrada.play()?.catch(() => {}); } catch { /* autoplay bloqueado */ } };
+    const tocarSaida = () => { try { somSaida.currentTime = 0; somSaida.play()?.catch(() => {}); } catch { /* autoplay bloqueado */ } };
     // ENTRADA: quando outro entra, quando eu conecto, ou se já estou conectado
     room.on(RoomEvent.ParticipantConnected, tocarEntrada);
     room.on(RoomEvent.Connected, tocarEntrada);
@@ -134,6 +133,7 @@ export default function App() {
   const [bugTexto, setBugTexto] = useState("");
   const [bugEnviando, setBugEnviando] = useState(false);
   const [bugMsg, setBugMsg] = useState("");
+  const [entrandoEm, setEntrandoEm] = useState(null); // id do servidor em que estou entrando
   const presencaRef = useRef(null);
 
   useEffect(() => {
@@ -164,9 +164,16 @@ export default function App() {
     let ativo = true;
 
     async function checarPerfil() {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("perfis").select("username, banido").eq("id", sessao.user.id).maybeSingle();
       if (!ativo) return;
+      if (error) {
+        // Rede caiu ou o perfil nao carregou: NAO sobrescreve o username ja
+        // carregado com o fallback do email (o nome do usuario mudava sozinho
+        // na tela a cada oscilacao de rede).
+        console.warn("[perfil] nao foi possivel checar o perfil:", error.message);
+        return;
+      }
       if (data?.banido) {
         alert("Sua conta foi banida.");
         await supabase.auth.signOut();
@@ -208,15 +215,17 @@ export default function App() {
     if (presencaRef.current) presencaRef.current.track({ sala_id: salaAtual?.id || null });
   }, [salaAtual]);
 
-  // Reconecta na sala da URL ao recarregar a pagina (F5)
+  // Reconecta na sala da URL ao recarregar a pagina (F5).
+  // O ref garante que isso roda UMA vez: o effect depende so de [servidores],
+  // entao enxergava um salaAtual congelado e podia reentrar na call sozinho a
+  // cada recarga da lista de servidores.
+  const jaReconectou = useRef(false);
   useEffect(() => {
-    if (servidores.length && !salaAtual) {
-      const salvo = new URLSearchParams(window.location.search).get("sala");
-      if (salvo) {
-        const serv = servidores.find((x) => x.id === salvo);
-        if (serv) entrarNaSala(serv);
-      }
-    }
+    if (jaReconectou.current || !servidores.length) return;
+    const salvo = new URLSearchParams(window.location.search).get("sala");
+    if (!salvo) { jaReconectou.current = true; return; }
+    const serv = servidores.find((x) => x.id === salvo);
+    if (serv) { jaReconectou.current = true; entrarNaSala(serv); }
   }, [servidores]);
 
   async function carregarServidores() {
@@ -277,10 +286,14 @@ export default function App() {
     if (!t) return;
     setBugEnviando(true); setBugMsg("");
     try {
-      const r = await fetch("https://api.convorax.space/reportar-bug", {
+      // o autor vem da sessao validada no backend, nao do corpo do request
+      const r = await fetch(`${API_URL}/reportar-bug`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto: t, autor: sessao.user.email }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessao?.access_token}`,
+        },
+        body: JSON.stringify({ texto: t }),
       });
       if (!r.ok) throw new Error();
       setBugMsg("Enviado! Valeu 🙌");
@@ -293,26 +306,51 @@ export default function App() {
     }
   }
   async function entrarNaSala(servidor) {
-    // manda o JWT de login; o backend valida e so libera se for membro
-    const jwt = sessao?.access_token;
-    const res = await fetch(`https://api.convorax.space/token?room=${servidor.id}`, {
-      headers: { Authorization: `Bearer ${jwt}` },
-    });
-    if (!res.ok) {
-      setAviso("Nao foi possivel entrar na call. Voce precisa ser membro do servidor.");
-      return;
+    if (entrandoEm) return;            // evita duplo clique abrir duas conexoes
+    setEntrandoEm(servidor.id);
+    setAviso("");
+    // Sem o try/catch, qualquer falha de rede (API fora do ar, DNS, CORS, offline)
+    // rejeitava dentro do onClick sem ninguem capturar: o botao simplesmente nao
+    // fazia nada e o usuario nao via erro nenhum.
+    const timeout = new AbortController();
+    const relogio = setTimeout(() => timeout.abort(), 15000);
+    try {
+      // manda o JWT de login; o backend valida e so libera se for membro
+      const jwt = sessao?.access_token;
+      if (!jwt) { setAviso("Sua sessao expirou. Entre de novo."); return; }
+
+      const res = await fetch(`${API_URL}/token?room=${encodeURIComponent(servidor.id)}`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+        signal: timeout.signal,
+      });
+
+      if (!res.ok) {
+        // cada status tem uma causa diferente: dizer sempre "voce nao e membro"
+        // mandava o usuario caçar o problema no lugar errado
+        if (res.status === 401) setAviso("Sua sessao expirou. Entre de novo.");
+        else if (res.status === 403) setAviso("Voce nao e membro deste servidor.");
+        else if (res.status === 429) setAviso("Muitas tentativas seguidas. Espere alguns segundos.");
+        else setAviso("Servidor de voz indisponivel. Tente de novo em instantes.");
+        return;
+      }
+
+      const data = await res.json();
+      if (!data.token) { setAviso("Nao foi possivel entrar na call."); return; }
+
+      setToken(data.token);
+      setSalaAtual(servidor);
+      window.history.replaceState(null, "", "?sala=" + servidor.id);
+    } catch (e) {
+      setAviso(e?.name === "AbortError"
+        ? "O servidor de voz demorou demais pra responder. Tente de novo."
+        : "Nao foi possivel falar com o servidor de voz. Confira sua conexao.");
+    } finally {
+      clearTimeout(relogio);
+      setEntrandoEm(null);
     }
-    const data = await res.json();
-    if (!data.token) {
-      setAviso("Nao foi possivel entrar na call.");
-      return;
-    }
-    setToken(data.token);
-    setSalaAtual(servidor);
-    window.history.replaceState(null, "", "?sala=" + servidor.id);
   }
   function sairDaSala() {
-    try { const a = new Audio(SOM_SAIDA); a.volume = 0.5; a.play(); } catch (e) {}
+    try { const a = new Audio(SOM_SAIDA); a.volume = 0.5; a.play()?.catch(() => {}); } catch { /* autoplay bloqueado */ }
     setSalaAtual(null);
     setToken("");
     window.history.replaceState(null, "", window.location.pathname);
@@ -434,7 +472,11 @@ export default function App() {
                     <span style={s.codLabel}>convite</span>
                     <span style={s.codigo}>{serv.codigo}</span>
                   </div>
-                  <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.05 }} transition={{ type: "spring", stiffness: 400, damping: 15 }} onClick={() => entrarNaSala(serv)} style={s.btnEntrar}>Entrar na voz</motion.button>
+                  <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.05 }} transition={{ type: "spring", stiffness: 400, damping: 15 }}
+                    onClick={() => entrarNaSala(serv)} disabled={!!entrandoEm}
+                    style={{ ...s.btnEntrar, opacity: entrandoEm && entrandoEm !== serv.id ? 0.5 : 1, cursor: entrandoEm ? "default" : "pointer" }}>
+                    {entrandoEm === serv.id ? "Entrando..." : "Entrar na voz"}
+                  </motion.button>
                 </motion.div>
               );
             })}

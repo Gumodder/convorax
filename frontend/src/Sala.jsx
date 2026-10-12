@@ -11,11 +11,27 @@ import { Track, ConnectionState, ConnectionQuality } from "livekit-client";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "./supabase";
+import { ASSETS } from "./config";
 
 // som de notificação de mensagem nova (arquivo no bucket público 'assets')
-const SOM_MENSAGEM = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/som-mensagem.mp3";
+const SOM_MENSAGEM = `${ASSETS}/som-mensagem.mp3`;
 // som tocado quando alguém inicia uma transmissão de tela
-const SOM_TRANSMISSAO = "https://jdmoprahepzbpmuttywd.supabase.co/storage/v1/object/public/assets/som-transmissao.mp3";
+const SOM_TRANSMISSAO = `${ASSETS}/som-transmissao.mp3`;
+
+// Um Audio por som, reaproveitado. Criar `new Audio()` dentro do handler fazia
+// uma conversa de 500 mensagens deixar 500 elementos de midia pendurados.
+const tocadores = {};
+function tocar(url, volume = 0.5) {
+  try {
+    let a = tocadores[url];
+    if (!a) { a = new Audio(url); tocadores[url] = a; }
+    a.volume = volume;
+    a.currentTime = 0;
+    // play() devolve uma promise que rejeita quando o browser bloqueia autoplay;
+    // sem o catch isso virava "Unhandled promise rejection" no console.
+    a.play()?.catch(() => {});
+  } catch { /* som e enfeite: nunca pode quebrar a call */ }
+}
 
 const CORES = ["#a855f7", "#3b82f6", "#06b6d4", "#ec4899", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#14b8a6", "#f97316"];
 function corDoNome(nome) {
@@ -249,6 +265,12 @@ function ParticipanteMini({ participant, avatarUrl }) {
 // ---- Chat ----
 function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais = [], canalAtual, onTrocarCanal, onCriarCanal, onApagarCanal, criandoCanal, souDono }) {
   const nomeCanal = canais.find((c) => c.id === canalId)?.nome || "chat";
+  // meuNome so vira o nome real depois que a call conecta (antes e "convidado"),
+  // mas o effect de realtime so depende de canalId. Lido via ref, o handler
+  // enxerga o valor atual — senao o som de "mensagem nova" tocava para as
+  // minhas proprias mensagens.
+  const meuNomeRef = useRef(meuNome);
+  useEffect(() => { meuNomeRef.current = meuNome; }, [meuNome]);
   const [mensagens, setMensagens] = useState([]);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -277,15 +299,18 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "mensagens", filter: "canal_id=eq." + canalId },
         (payload) => {
-          if (payload.new.autor !== meuNome) {
-            try { const a = new Audio(SOM_MENSAGEM); a.volume = 0.5; a.play(); } catch (e) {}
-          }
+          if (payload.new.autor !== meuNomeRef.current) tocar(SOM_MENSAGEM);
           setMensagens((m) => [...m, payload.new]);
         }
       )
       .on("postgres_changes",
         { event: "DELETE", schema: "public", table: "mensagens" },
-        (payload) => setMensagens((m) => m.filter((x) => x.id !== payload.old.id))
+        // payload.old so traz a PK (e vem vazio se a tabela nao tiver REPLICA
+        // IDENTITY FULL): sem o ?. isso lancava dentro do updater de estado.
+        (payload) => {
+          const id = payload.old?.id;
+          if (id) setMensagens((m) => m.filter((x) => x.id !== id));
+        }
       )
       .subscribe();
 
@@ -367,12 +392,31 @@ function Chat({ canalId, meuNome, onFechar, mobile, onImagem, onRecolher, canais
   async function enviarArquivo(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Sem limite, um arquivo de varios GB entupia o bucket e travava a aba.
+    const LIMITE_MB = 25;
+    if (file.size > LIMITE_MB * 1024 * 1024) {
+      setAvisoFlood(`Arquivo muito grande (max ${LIMITE_MB} MB).`);
+      setTimeout(() => setAvisoFlood(""), 4000);
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
     setEnviando(true);
     try {
-      const ext = file.name.split(".").pop();
-      const caminho = `${canalId}/${Date.now()}.${ext}`;
+      // A extensao vem do TIPO real do arquivo. Vinha de file.name.split("."),
+      // que num arquivo sem ponto devolvia o nome inteiro, e num nome com "/"
+      // ou ".." montava um caminho arbitrario dentro do bucket.
+      const porTipo = {
+        "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif",
+        "image/webp": "webp", "image/avif": "avif",
+        "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov",
+      };
+      const doNome = (file.name.split(".").pop() || "").toLowerCase();
+      const ext = porTipo[file.type] || (/^[a-z0-9]{1,5}$/.test(doNome) ? doNome : "bin");
+      // sufixo aleatorio: dois uploads no mesmo milissegundo colidiam no mesmo caminho
+      const unico = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const caminho = `${canalId}/${unico}.${ext}`;
       const { error: upErr } = await supabase.storage
-        .from("chat-files").upload(caminho, file);
+        .from("chat-files").upload(caminho, file, { contentType: file.type || undefined });
       if (upErr) throw upErr;
       const { data: urlData } = supabase.storage
         .from("chat-files").getPublicUrl(caminho);
@@ -644,7 +688,7 @@ async function medirPing(room) {
     });
     if (rtt == null) return null;
     return Math.max(0, Math.round(rtt * 1000));
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -720,6 +764,77 @@ function StatusConexao({ sub }) {
   );
 }
 
+// Barra de controles da call (mic, camera, transmitir, sair).
+// Fica em escopo de modulo de proposito: declarada dentro do render do Sala, o
+// React a via como um componente NOVO a cada render e remontava a arvore — o
+// estado interno (micOn/camOn) voltava ao valor inicial e o botao do microfone
+// mentia sobre o proprio estado sempre que qualquer coisa no Sala mudava.
+function BarraControles({ localParticipant, mobile, transmitindo, onTransmitir, onSair }) {
+  const [micOn, setMicOn] = useState(localParticipant?.isMicrophoneEnabled ?? true);
+  const [camOn, setCamOn] = useState(localParticipant?.isCameraEnabled ?? false);
+  useEffect(() => {
+    if (!localParticipant) return;
+    const upd = () => {
+      setMicOn(localParticipant.isMicrophoneEnabled);
+      setCamOn(localParticipant.isCameraEnabled);
+    };
+    localParticipant.on("trackMuted", upd);
+    localParticipant.on("trackUnmuted", upd);
+    localParticipant.on("trackPublished", upd);
+    localParticipant.on("trackUnpublished", upd);
+    upd();
+    return () => {
+      localParticipant.off("trackMuted", upd);
+      localParticipant.off("trackUnmuted", upd);
+      localParticipant.off("trackPublished", upd);
+      localParticipant.off("trackUnpublished", upd);
+    };
+  }, [localParticipant]);
+
+  async function toggleMic() {
+    if (!localParticipant) return;
+    try { await localParticipant.setMicrophoneEnabled(!micOn); }
+    catch (e) { alert("Erro no microfone: " + e.message); }
+  }
+  async function toggleCam() {
+    if (!localParticipant) return;
+    try { await localParticipant.setCameraEnabled(!camOn); }
+    catch (e) { alert("Nao foi possivel ligar a camera: " + e.message); }
+  }
+
+  const btnBase = { border: "none", borderRadius: 12, padding: "12px 16px", cursor: "pointer", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#fff", width: "100%" };
+  const wrap = mobile
+    ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxWidth: 460, margin: "0 auto" }
+    : { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "center" };
+  return (
+    <div style={wrap}>
+      <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.04 }} onClick={toggleMic}
+        style={{ ...btnBase, background: micOn ? "rgba(255,255,255,0.1)" : "#f23f43" }}
+        title={micOn ? "Silenciar microfone" : "Ativar microfone"}>
+        {micOn ? "🎤" : "🔇"} <span>{micOn ? "Microfone" : "Mutado"}</span>
+      </motion.button>
+
+      <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.04 }} onClick={toggleCam}
+        style={{ ...btnBase, background: camOn ? "linear-gradient(135deg, #7c3aed, #3b82f6)" : "rgba(255,255,255,0.1)" }}
+        title={camOn ? "Desligar câmera" : "Ligar câmera"}>
+        {camOn ? "📹" : "📷"} <span>{camOn ? "Câmera on" : "Câmera"}</span>
+      </motion.button>
+
+      <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.04 }} onClick={onTransmitir}
+        style={{ ...btnBase, background: transmitindo ? "#f23f43" : "linear-gradient(135deg, #7c3aed, #3b82f6)" }}
+        title={transmitindo ? "Parar transmissao" : "Transmitir tela (com som)"}>
+        {transmitindo ? "⏹" : "🖥"} <span>{transmitindo ? "Parar" : "Transmitir"}</span>
+      </motion.button>
+
+      <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.04 }} onClick={onSair}
+        style={{ ...btnBase, background: "rgba(242,63,67,0.15)", color: "#f77", border: "1px solid rgba(242,63,67,0.3)" }}
+        title="Sair da call">
+        🚪 <span>Sair</span>
+      </motion.button>
+    </div>
+  );
+}
+
 export default function Sala({ salaId, nomeServidor, onSair }) {
   const participants = useParticipants();
   const screenShares = useTracks([Track.Source.ScreenShare]);
@@ -757,7 +872,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
   const contagemTelasAnterior = useRef(null);
   useEffect(() => {
     if (contagemTelasAnterior.current !== null && screenShares.length > contagemTelasAnterior.current) {
-      try { const a = new Audio(SOM_TRANSMISSAO); a.volume = 0.5; a.play(); } catch (e) {}
+      tocar(SOM_TRANSMISSAO);
     }
     contagemTelasAnterior.current = screenShares.length;
   }, [screenShares.length]);
@@ -768,19 +883,31 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Busca o avatar SO de quem esta na call. Antes isso era um select sem filtro
+  // nenhum, que baixava o diretorio inteiro de usuarios da plataforma (username,
+  // avatar e email_nome de todo mundo) e ainda batia no teto de 1000 linhas do
+  // PostgREST — passando disso, quem entrasse depois ficava sem foto.
+  const identidades = participants.map((p) => p.identity).filter(Boolean);
+  const chaveIdentidades = identidades.slice().sort().join("|");
   useEffect(() => {
-    supabase.from("perfis").select("email_nome, username, avatar_url").then(({ data }) => {
-      if (!data) return;
+    const nomes = chaveIdentidades ? chaveIdentidades.split("|") : [];
+    if (!nomes.length) return;
+    let ativo = true;
+    (async () => {
+      // dois .in() em vez de um .or() montado por string: o cliente escapa os
+      // valores, entao um username com virgula ou parentese nao quebra a query
+      const [porUsername, porEmail] = await Promise.all([
+        supabase.from("perfis").select("username, avatar_url").in("username", nomes),
+        supabase.from("perfis").select("email_nome, avatar_url").in("email_nome", nomes),
+      ]);
+      if (!ativo) return;
       const mapa = {};
-      data.forEach((p) => {
-        if (p.avatar_url) {
-          if (p.email_nome) mapa[p.email_nome] = p.avatar_url;
-          if (p.username) mapa[p.username] = p.avatar_url;
-        }
-      });
+      (porUsername.data || []).forEach((p) => { if (p.avatar_url && p.username) mapa[p.username] = p.avatar_url; });
+      (porEmail.data || []).forEach((p) => { if (p.avatar_url && p.email_nome) mapa[p.email_nome] = p.avatar_url; });
       setPerfis(mapa);
-    });
-  }, []);
+    })();
+    return () => { ativo = false; };
+  }, [chaveIdentidades]);
 
   // Carrega os canais de texto do servidor
   useEffect(() => {
@@ -821,11 +948,19 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
     if (!salaId) return;
     let ativo = true;
     (async () => {
-      const { data: u } = await supabase.auth.getUser();
-      const meuId = u?.user?.id;
-      const { data } = await supabase
-        .from("servidores").select("nome, avatar_url, dono_id, codigo").eq("id", salaId).single();
-      if (!ativo || !data) return;
+      // getSession() le a sessao local; getUser() fazia uma chamada de rede extra
+      // que, falhando, deixava meuId undefined e o dono sem nenhum controle de
+      // admin (lapis de editar, lixeira de canal, moderar mensagem) pelo resto
+      // da sessao — em silencio, sem erro na tela.
+      const { data: u } = await supabase.auth.getSession();
+      const meuId = u?.session?.user?.id;
+      const { data, error } = await supabase
+        .from("servidores").select("nome, avatar_url, dono_id, codigo").eq("id", salaId).maybeSingle();
+      if (!ativo) return;
+      if (error || !data) {
+        console.warn("[sala] nao foi possivel carregar o servidor:", error?.message || "sem dados");
+        return;
+      }
       setSrvNome(data.nome || "");
       setSrvAvatar(data.avatar_url || "");
       setSrvCodigo(data.codigo || "");
@@ -889,78 +1024,6 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
       await localParticipant.setScreenShareEnabled(!transmitindo, { audio: true, selfBrowserSurface: "include" });
     } catch (e) { alert("Nao foi possivel iniciar a transmissao: " + e.message); }
   }
-
-  const BotaoTela = () => (
-    <motion.button whileTap={{ scale: 0.9 }} whileHover={{ scale: 1.04 }}
-      onClick={toggleTransmissao}
-      style={{ background: transmitindo ? "#f23f43" : "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", color: "#fff", borderRadius: 10, padding: "9px 14px", cursor: "pointer", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}
-      title={transmitindo ? "Parar transmissao" : "Transmitir tela (com som)"}>
-      {transmitindo ? "⏹ Parar" : "🖥 Transmitir"}
-    </motion.button>
-  );
-
-  // Barra de controles própria (mic, câmera, transmitir, sair)
-  const BarraControles = () => {
-    const [micOn, setMicOn] = useState(localParticipant?.isMicrophoneEnabled ?? true);
-    const [camOn, setCamOn] = useState(localParticipant?.isCameraEnabled ?? false);
-    useEffect(() => {
-      if (!localParticipant) return;
-      const upd = () => {
-        setMicOn(localParticipant.isMicrophoneEnabled);
-        setCamOn(localParticipant.isCameraEnabled);
-      };
-      localParticipant.on("trackMuted", upd);
-      localParticipant.on("trackUnmuted", upd);
-      localParticipant.on("trackPublished", upd);
-      localParticipant.on("trackUnpublished", upd);
-      upd();
-      return () => {
-        localParticipant.off("trackMuted", upd);
-        localParticipant.off("trackUnmuted", upd);
-        localParticipant.off("trackPublished", upd);
-        localParticipant.off("trackUnpublished", upd);
-      };
-    }, [localParticipant]);
-
-    async function toggleMic() {
-      try { await localParticipant.setMicrophoneEnabled(!micOn); } catch (e) { alert("Erro no microfone: " + e.message); }
-    }
-    async function toggleCam() {
-      try { await localParticipant.setCameraEnabled(!camOn); } catch (e) { alert("Nao foi possivel ligar a camera: " + e.message); }
-    }
-
-    const btnBase = { border: "none", borderRadius: 12, padding: "12px 16px", cursor: "pointer", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#fff", width: "100%" };
-    const wrap = mobile
-      ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxWidth: 460, margin: "0 auto" }
-      : { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "center" };
-    return (
-      <div style={wrap}>
-        <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.04 }} onClick={toggleMic}
-          style={{ ...btnBase, background: micOn ? "rgba(255,255,255,0.1)" : "#f23f43" }}
-          title={micOn ? "Silenciar microfone" : "Ativar microfone"}>
-          {micOn ? "🎤" : "🔇"} <span>{micOn ? "Microfone" : "Mutado"}</span>
-        </motion.button>
-
-        <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.04 }} onClick={toggleCam}
-          style={{ ...btnBase, background: camOn ? "linear-gradient(135deg, #7c3aed, #3b82f6)" : "rgba(255,255,255,0.1)" }}
-          title={camOn ? "Desligar câmera" : "Ligar câmera"}>
-          {camOn ? "📹" : "📷"} <span>{camOn ? "Câmera on" : "Câmera"}</span>
-        </motion.button>
-
-        <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.04 }} onClick={toggleTransmissao}
-          style={{ ...btnBase, background: transmitindo ? "#f23f43" : "linear-gradient(135deg, #7c3aed, #3b82f6)" }}
-          title={transmitindo ? "Parar transmissao" : "Transmitir tela (com som)"}>
-          {transmitindo ? "⏹" : "🖥"} <span>{transmitindo ? "Parar" : "Transmitir"}</span>
-        </motion.button>
-
-        <motion.button whileTap={{ scale: 0.94 }} whileHover={{ scale: 1.04 }} onClick={onSair}
-          style={{ ...btnBase, background: "rgba(242,63,67,0.15)", color: "#f77", border: "1px solid rgba(242,63,67,0.3)" }}
-          title="Sair da call">
-          🚪 <span>Sair</span>
-        </motion.button>
-      </div>
-    );
-  };
 
   // Audio invisivel: mic dos participantes + audio das transmissoes, com volume separado
   // IMPORTANTE: elemento JSX (nao componente <RenderAudio/>). Definir como componente
@@ -1075,7 +1138,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
             <div style={{ marginBottom: 10 }}>
               <StatusConexao sub={srvNome} />
             </div>
-            <BarraControles />
+            <BarraControles localParticipant={localParticipant} mobile={mobile} transmitindo={transmitindo} onTransmitir={toggleTransmissao} onSair={onSair} />
           </div>
 
           <AnimatePresence>
@@ -1182,7 +1245,7 @@ export default function Sala({ salaId, nomeServidor, onSair }) {
               <StatusConexao sub={srvNome} />
             </div>
             <div style={{ padding: "12px 10px" }}>
-              <BarraControles />
+              <BarraControles localParticipant={localParticipant} mobile={mobile} transmitindo={transmitindo} onTransmitir={toggleTransmissao} onSair={onSair} />
             </div>
           </div>
         </div>

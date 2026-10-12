@@ -1,9 +1,18 @@
 {
-  "name": "backend",
+  "name": "convorax-backend",
   "version": "1.0.0",
+  "description": "Backend de tokens da Convorax: valida o login e libera a entrada na call",
   "main": "server.js",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.21.0",

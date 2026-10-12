@@ -18,10 +18,22 @@ export default function Login() {
   async function handle() {
     setErro("");
     setSucesso("");
+    // Espaco colado junto com o email e maiuscula sao a causa mais comum de
+    // "minha senha nao funciona": o Supabase trata o email como chave literal.
+    const emailLimpo = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLimpo)) {
+      setErro("Digite um email valido.");
+      return;
+    }
+    if (modo === "cadastrar" && senha.length < 6) {
+      // a troca de senha ja exigia 6; o cadastro nao exigia nada
+      setErro("A senha precisa ter pelo menos 6 caracteres.");
+      return;
+    }
     setCarregando(true);
     try {
       if (modo === "entrar") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
+        const { error } = await supabase.auth.signInWithPassword({ email: emailLimpo, password: senha });
         if (error) {
           const msg = (error.message || "").toLowerCase();
           if (msg.includes("not confirmed") || msg.includes("confirm")) {
@@ -31,7 +43,7 @@ export default function Login() {
           }
         }
       } else {
-        const { data, error } = await supabase.auth.signUp({ email, password: senha });
+        const { data, error } = await supabase.auth.signUp({ email: emailLimpo, password: senha });
         if (error) {
           setErro(error.message);
         } else if (data?.user && !data.session) {
@@ -60,6 +72,7 @@ export default function Login() {
         <p style={estilos.sub}>{modo === "entrar" ? "Que bom te ver de novo." : "É rapidinho."}</p>
         <label style={estilos.label}>EMAIL</label>
         <input value={email} onChange={(e) => setEmail(e.target.value)}
+          type="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false}
           onKeyDown={(e) => { if (e.key === "Enter") senhaRef.current?.focus(); }} style={estilos.input} />
         <label style={estilos.label}>SENHA</label>
         <div style={{ position: "relative" }}>
