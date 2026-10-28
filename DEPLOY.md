@@ -210,7 +210,47 @@ sudo ufw enable
 A porta 3001 **nao** e aberta: o backend so e alcancado pelo nginx, de dentro
 da propria maquina.
 
-## 8. Atualizar depois de um push
+## 8. Deploy automatico pelo GitHub Actions (opcional, recomendado)
+
+Depois que a VPS estiver de pe, da para parar de subir na mao: um push na `main`
+publica sozinho, com build conferido antes, prova de vida depois e **rollback
+automatico** se algo falhar.
+
+Como a chave fica segura: ela nao da shell na maquina. O `authorized_keys`
+amarra ela a **um unico comando** (`/usr/local/bin/convorax-deploy`). Quem roubar
+a chave consegue disparar um deploy do seu proprio repositorio — e mais nada.
+Sem shell, sem tunel, sem sftp.
+
+Na VPS, uma vez so:
+
+```bash
+bash /opt/convorax/app/scripts/setup-deploy-key.sh
+```
+
+Ele gera a chave, amarra ao comando unico e **imprime na tela exatamente o que
+colar** em cada um dos quatro secrets. Crie-os em
+*Settings → Secrets and variables → Actions*: `VPS_HOST`, `VPS_USER`,
+`VPS_KNOWN_HOSTS` e `VPS_SSH_KEY`. Depois apague a chave privada da VPS
+(`shred -u /root/.ssh/convorax_deploy`) — ela ja estara no GitHub.
+
+> Vale criar tambem o Environment `producao` em *Settings → Environments* e
+> marcar **Required reviewers** com o seu usuario: ai todo deploy espera um
+> clique seu, e nada vai pra producao sem voce ver.
+
+O que o `scripts/deploy.sh` faz, nessa ordem — e **qualquer falha reverte tudo
+para o commit anterior**:
+
+1. guarda o commit atual (o ponto de volta);
+2. `git fetch` e, se nao houver commit novo, sai sem mexer em nada;
+3. `npm ci` nos dois lados (falha de proposito se o lock divergir do package.json);
+4. build do frontend, conferindo que o `dist/index.html` saiu;
+5. reinicia o servico e espera o `/health` responder, ate 30s;
+6. confere que `/token` **sem login devolve 401** — se devolver outra coisa, o
+   backend novo nao esta no ar e o deploy e revertido.
+
+Para subir sob demanda sem push: aba **Actions → Deploy → Run workflow**.
+
+## 9. Atualizar na mao
 
 ```bash
 cd /opt/convorax/app
@@ -222,6 +262,8 @@ sudo -u convorax npm --prefix frontend run build
 ```
 
 O nginx serve `dist/` direto do disco — nao precisa recarregar.
+
+(Com o Actions configurado, nada disso e necessario: um push na `main` faz tudo.)
 
 ## Conferindo se ficou de pe
 
